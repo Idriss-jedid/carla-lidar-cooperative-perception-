@@ -1,0 +1,6 @@
+# Save PLY files too, to open the clouds in MeshLab / CloudCompare.
+scenario:
+  spawn_center: [83.5, -134.7]
+recording:
+  num_frames: 3
+  formats: [npy, ply]

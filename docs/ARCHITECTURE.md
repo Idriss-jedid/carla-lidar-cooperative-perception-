@@ -1,0 +1,150 @@
+# Architecture
+
+The code is split in three layers. Each layer only calls the one below it.
+
+| Layer | Folder | Who uses it | Depends on CARLA? |
+|---|---|---|---|
+| **Front** | `main.py`, `cavlidar/api.py` | you | no (imports backend lazily) |
+| **Core** | `cavlidar/core/` | everything | no |
+| **Backend** | `cavlidar/backend/` | `api.py` only | `simulator/`, `actors/`, `recording/recorder.py` yes; the rest no |
+
+Design rules:
+
+- **One place for parameters.** Every tunable value is a field in `core/config.py`, set from YAML. No magic numbers inside functions.
+- **Enums instead of free text.** Options with a fixed set of values (`camera`, `formats`, roles, plot views) are enums, so a typo fails immediately with the list of valid choices.
+- **Fail early, explain why.** Invalid parameters raise `ConfigError` before CARLA is touched; CARLA problems raise `ServerUnavailable`, `MapMismatch`, `SpawnError` or `SensorTimeout` with a message saying what to do.
+- **Always clean up.** `SimulationSession` is a context manager: whatever happens (error, Ctrl+C), sensors and vehicles are destroyed and CARLA goes back to asynchronous mode.
+- **Offline parts don't need CARLA.** `geometry`, `storage` and `visualization` only use numpy/matplotlib, so recorded data can be processed in another environment (e.g. the PyTorch one).
+
+---
+
+## Front: `cavlidar/api.py`
+
+| Function | What it does |
+|---|---|
+| `load_config(*experiment_files, overrides=None)` | Loads `config/default.yaml`, then each experiment file, then overrides like `"lidar.channels=64"`. Validates everything and logs warnings (e.g. partial sweeps). Returns a `Config`. |
+| `check_connection(cfg)` | Connects, compares client/server versions, checks the map, counts spawn points, warns if the world was left in synchronous mode. Returns a dict. |
+| `drive_cars(cfg, seconds=40)` | Spawns the scenario's CAVs and traffic with autopilot and paces the simulation to real time so you can watch. Saves nothing. |
+| `record_lidar(cfg, name="run")` | Creates `data/runs/<date>_<time>_<name>/`, saves `config.yaml`, spawns vehicles, mounts one LiDAR per CAV, records frames, saves previews. Returns the run folder. |
+| `show_frame(run_dir, frame=None, view="both")` | Plots one recorded frame (default: the last). `view`: `sensor`, `world` or `both`. Works without CARLA. |
+
+`main.py` is a thin command-line wrapper around these five functions.
+
+## Core: `cavlidar/core/`
+
+### `config.py`
+| Item | Role |
+|---|---|
+| `ServerConfig`, `SimulationConfig`, `ScenarioConfig`, `LidarConfig`, `RecordingConfig` | One dataclass per section of the YAML. Defaults = paper settings. |
+| `Config` | Groups the five sections; `to_dict()` gives plain YAML-ready data. |
+| `load_config(*paths, overrides)` | Merge defaults ← YAML files ← overrides, reject unknown keys, convert enums, validate. |
+| `validate(cfg)` | Raises `ConfigError` for impossible values; returns warnings for risky ones. |
+| `save_config(cfg, path)` | Writes the exact configuration of a run next to its data. |
+
+### `enums.py`
+| Enum | Values | Used for |
+|---|---|---|
+| `CameraMode` | `follow`, `top`, `none` | `recording.camera` |
+| `PointFormat` | `npy`, `ply` | `recording.formats` |
+| `Role` | `cav`, `traffic`, `other` | role of each vehicle (`Role.CAV.name_of(2)` → `"cav_2"`) |
+| `ViewMode` | `sensor`, `world`, `both` | which plots `show_frame` makes |
+
+All enums have `parse(value)`, which accepts text in any case and gives a clear error otherwise.
+
+### `constants.py`
+Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`frames/`, `meta.json`, `config.yaml`), file name of CAV clouds (`cav0`), sensor timeout.
+
+### `errors.py`
+`CavLidarError` (base) → `ConfigError`, `ServerUnavailable`, `MapMismatch`, `SpawnError`, `SensorTimeout`. `main.py` catches the base class and prints a one-line message instead of a long traceback.
+
+## Backend: `cavlidar/backend/`
+
+### `simulator/connection.py`
+| Function | What it does |
+|---|---|
+| `connect(host, port, timeout)` | Creates a `carla.Client` and makes one request, so a missing server fails right here with `ServerUnavailable`. |
+| `versions(client)` | `(client_version, server_version)`. |
+| `map_name(world)` | `"Town03"` from `"Carla/Maps/Town03"`. |
+| `ensure_town(client, town, allow_map_change)` | Returns the world if the right map is loaded; otherwise loads it only if allowed, else raises `MapMismatch`. |
+
+### `simulator/sync.py`
+`SyncMode` — context manager that switches the world to synchronous mode with `fixed_delta_seconds`, puts the Traffic Manager in sync mode too, and restores the original settings on exit. `tick()` advances one step and returns the frame number.
+
+**Why it matters:** with `fixed_delta_seconds = 1 / rotation_frequency`, one tick = one full LiDAR rotation. In asynchronous mode the server runs at its own FPS and each measurement is only a slice (see `e09`).
+
+### `simulator/camera.py`
+| Function | What it does |
+|---|---|
+| `top_view(world, x, y, z, height)` | Puts the CARLA window's camera above a point, looking down. |
+| `follow(world, actor, height)` | Same, above an actor; called every tick to follow it. |
+
+### `simulator/session.py`
+`SimulationSession(cfg)` — owns everything created in CARLA.
+
+| Method | What it does |
+|---|---|
+| `__enter__` | connect → check map → enter `SyncMode` → seed the Traffic Manager. |
+| `spawn_fleet()` | Picks spawn points (around `spawn_center` if set), spawns CAVs then traffic, enables autopilot, ticks once. Raises `SpawnError` if not all CAVs fit. |
+| `attach_lidars()` | One `Lidar` per CAV, named `cav0`, `cav1`, ... |
+| `read_scans(frame)` | The `LidarScan` of every CAV for that frame. |
+| `role_names()` | `{actor_id: "cav_0" / "traffic_3"}` for the ground truth. |
+| `update_camera()` | Applies `recording.camera`. |
+| `__exit__` | Destroys sensors and vehicles, then restores asynchronous mode — even after an error. |
+
+### `actors/vehicles.py`
+| Function | What it does |
+|---|---|
+| `candidate_spawn_points(world, rng, center, radius)` | Spawn points to try, in order: inside the radius first (shuffled), then the nearest outside. Without center: whole map shuffled. |
+| `spawn_vehicles(world, count, pattern, candidates, rng, role)` | Spawns up to `count` 4-wheel vehicles matching `pattern`, consuming `candidates` so CAVs and traffic never share a spot. Sets `role_name` and a random colour. |
+| `enable_autopilot(vehicles, tm, speed_range, lights_range, rng)` | Autopilot with a random speed offset and red-light behaviour per vehicle. |
+| `destroy(client, actors)` | Removes actors in one batch. |
+
+### `actors/lidar.py`
+| Item | What it does |
+|---|---|
+| `build_blueprint(world, cfg)` | Copies every `LidarConfig` field to the CARLA ray-cast LiDAR attributes. |
+| `to_numpy(measurement)` | Raw bytes → `(N, 4)` float32 array `x, y, z, intensity`. |
+| `Lidar(world, vehicle, cfg, name)` | Spawns the sensor at `(mount_x, mount_y, mount_z)` on the vehicle and queues its measurements. |
+| `Lidar.get(frame)` | Returns the scan of exactly that frame, dropping older ones; raises `SensorTimeout` if nothing comes. |
+| `LidarScan` | `name, frame, timestamp, points, sensor_pose`. |
+
+### `actors/ground_truth.py`
+`collect_vehicles(world, role_names)` — for every vehicle: id, model, role, pose, box half-sizes, box centre offset, speed. This is what detections will be compared to for AP@0.5.
+
+### `recording/recorder.py`
+`record(session, run_dir)` — warm-up ticks (nothing saved), then saves one frame every `save_every` ticks until `num_frames`: point clouds + `meta.json`. Returns a `RecordSummary` (frames, mean points per scan).
+
+### `recording/storage.py`
+| Function | What it does |
+|---|---|
+| `create_run_dir`, `frame_dir` | Create the run / frame folders. |
+| `save_points(dir, name, points, formats)` | Writes `.npy` and/or binary `.ply`. |
+| `write_ply`, `read_ply` | Binary PLY writer; reader for binary and ASCII (CARLA's own `save_to_disk`). |
+| `load_points`, `save_json`, `load_json` | Small helpers. |
+| `list_frames(run_dir)`, `load_frame(run_dir, frame)` | Read a run back: `(meta, {"cav0": points, ...})`. |
+
+### `geometry/transforms.py`
+| Function | What it does |
+|---|---|
+| `transform_to_dict(t)` | `carla.Transform` → `{x, y, z, roll, pitch, yaw}`. |
+| `pose_to_matrix(pose)` | 4×4 sensor→world matrix, same formula as CARLA. |
+| `sensor_to_world(points, pose)` | Moves a cloud into the world frame — the core operation of early (point-level) fusion. |
+| `box_corners_2d(pose, extent, offset)` | 4 corners of a vehicle box seen from above. |
+
+CARLA uses a **left-handed** frame (x forward, y right, z up); all plots invert the y axis so they look like a top view.
+
+### `visualization/bev.py`
+| Function | What it does |
+|---|---|
+| `plot_sensor_frame(meta, clouds, out)` | One panel per CAV in its own frame, coloured by height. |
+| `plot_world_frame(meta, clouds, out)` | All CAVs moved to the world frame on one image (point-level fusion) with ground-truth boxes. Walls seen by two CAVs must overlap — a quick check that poses are right. |
+
+## Adding something new
+
+| You want to… | Do this |
+|---|---|
+| add a parameter | add a field to the right dataclass in `core/config.py`, add it to `config/default.yaml`, document it in `PARAMETERS.md`, use `cfg.<section>.<field>` in the backend |
+| add a fixed choice | add an enum in `core/enums.py`, convert it in `config._from_dict` |
+| add a sensor (camera, radar) | new module in `backend/actors/`, attach it in `SimulationSession`, read it in `recorder.record` |
+| add a processing step (ground removal, BEV…) | new folder `backend/processing/` using `storage.load_frame` — it does not need CARLA |
+| expose it to users | one new function in `api.py` and one sub-command in `main.py` |

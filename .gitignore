@@ -1,0 +1,14 @@
+# recorded data (large) - keep it out of git
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

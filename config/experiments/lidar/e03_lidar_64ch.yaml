@@ -1,0 +1,7 @@
+# Higher-resolution LiDAR: 64 channels, 2.2M points/s (Velodyne HDL-64-like).
+# Compare points per scan and how well small/far objects are covered.
+scenario:
+  spawn_center: [83.5, -134.7]
+lidar:
+  channels: 64
+  points_per_second: 2200000

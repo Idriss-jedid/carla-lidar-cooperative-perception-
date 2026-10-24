@@ -1,0 +1,7 @@
+# Aggressive traffic: vehicles may run red lights and speed up to 30 % over
+# the limit (paper: traffic light compliance 0-100 % ignored).
+scenario:
+  num_traffic: 40
+  spawn_center: [83.5, -134.7]
+  speed_difference_range: [-30, 20]
+  ignore_lights_range: [0, 100]

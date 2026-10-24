@@ -1,0 +1,10 @@
+# Densest configuration of the paper: 10 CAVs + 40 other vehicles.
+# Expect about 0.15 s per tick on a GTX 1650 / Ryzen 5 4600H.
+scenario:
+  num_cavs: 10
+  num_traffic: 40
+  spawn_center: [83.5, -134.7]
+  spawn_radius: 120.0
+recording:
+  camera: top
+  camera_height: 90.0

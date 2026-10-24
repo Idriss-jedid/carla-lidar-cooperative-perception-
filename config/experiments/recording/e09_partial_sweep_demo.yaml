@@ -1,0 +1,8 @@
+# Teaching example: tick = 0.01 s with a 20 Hz LiDAR -> each scan only covers
+# 72 degrees. This is the bug of the first 02_lidar_capture.py (async mode).
+simulation:
+  fixed_delta_seconds: 0.01
+scenario:
+  spawn_center: [83.5, -134.7]
+recording:
+  num_frames: 5

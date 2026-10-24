@@ -1,0 +1,6 @@
+# LiDAR mounted low (1.6 m instead of 2.4 m): more self-occlusion by
+# neighbouring cars, smaller visible area.
+scenario:
+  spawn_center: [83.5, -134.7]
+lidar:
+  mount_z: 1.6

@@ -1,0 +1,52 @@
+# Default parameters. Experiment files in config/experiments/ only list what
+# they change. Full explanation of every key: docs/PARAMETERS.md
+
+server:
+  host: 127.0.0.1          # machine running CarlaUE4.exe
+  port: 2000               # CARLA RPC port (-carla-rpc-port)
+  tm_port: 8000            # Traffic Manager port
+  timeout: 60.0            # seconds before a request to CARLA fails
+  town: Town03             # map the paper uses
+  allow_map_change: false  # true = call load_world() if another map is loaded (crashed on 4 GB GPU)
+
+simulation:
+  fixed_delta_seconds: 0.05  # seconds of simulated time per tick; keep = 1 / lidar.rotation_frequency
+  no_rendering: false        # true = no graphics (faster, frees GPU; window stays frozen)
+  seed: 7                    # same seed + same config = same vehicles at the same places
+
+scenario:
+  num_cavs: 4                         # vehicles WITH a LiDAR (paper: 4, 6, 8, 10)
+  num_traffic: 20                     # vehicles WITHOUT sensor (paper: 20-40)
+  cav_blueprint: vehicle.tesla.model3 # CARLA model of the CAVs
+  traffic_blueprint: "vehicle.*"      # pattern for other vehicles (random 4-wheel models)
+  spawn_center: null                  # [x, y] to spawn around a place, null = whole map
+  spawn_radius: 80.0                  # metres around spawn_center
+  autopilot: true                     # vehicles drive themselves (Traffic Manager)
+  speed_difference_range: [-20, 20]   # % below speed limit, drawn per vehicle (paper: -20%..+20%)
+  ignore_lights_range: [0, 0]         # % chance to run red lights, per vehicle (paper: 0-100%)
+
+lidar:                       # paper Table 1: 32 channels, 120 m, 1M pts/s, 20 Hz
+  channels: 32
+  range: 120.0
+  points_per_second: 1000000
+  rotation_frequency: 20.0
+  upper_fov: 2.0             # degrees above horizontal of the highest laser
+  lower_fov: -25.0           # degrees of the lowest laser
+  mount_x: 0.0               # sensor position relative to the vehicle centre (m)
+  mount_y: 0.0
+  mount_z: 2.4
+  dropoff_general_rate: 0.45     # CARLA default: share of points randomly dropped
+  dropoff_intensity_limit: 0.8
+  dropoff_zero_intensity: 0.4
+  noise_stddev: 0.0              # metres of Gaussian noise along each ray
+
+recording:
+  output_dir: data/runs
+  warmup_ticks: 20           # ticks before saving (cars start moving, sensors settle)
+  num_frames: 10             # frames saved per run
+  save_every: 1              # save 1 tick out of N (N=20 -> one frame per simulated second)
+  formats: [npy]             # npy and/or ply
+  save_ground_truth: true    # store every vehicle's pose and box in meta.json
+  camera: follow             # follow | top | none
+  camera_height: 40.0
+  preview: true              # save preview_*.png of the last frame
