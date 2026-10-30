@@ -20,7 +20,8 @@ scenario:
   cav_blueprint: vehicle.tesla.model3 # CARLA model of the CAVs
   traffic_blueprint: "vehicle.*"      # pattern for other vehicles (random 4-wheel models)
   spawn_center: null                  # [x, y] to spawn around a place, null = whole map
-  spawn_radius: 80.0                  # metres around spawn_center
+  spawn_radius: 80.0                  # metres around spawn_center (preference, not a limit)
+  spawn_bbox: null                    # [x_min, x_max, y_min, y_max] hard spawn limit, null = none
   autopilot: true                     # vehicles drive themselves (Traffic Manager)
   speed_difference_range: [-20, 20]   # % below speed limit, drawn per vehicle (paper: -20%..+20%)
   ignore_lights_range: [0, 0]         # % chance to run red lights, per vehicle (paper: 0-100%)
@@ -42,7 +43,7 @@ lidar:                       # paper Table 1: 32 channels, 120 m, 1M pts/s, 20 H
 
 recording:
   output_dir: data/runs
-  warmup_ticks: 20           # ticks before saving (cars start moving, sensors settle)
+  warmup_ticks: 100          # ticks before saving; the Traffic Manager needs ~3 s (60 ticks) to start cars
   num_frames: 10             # frames saved per run
   save_every: 1              # save 1 tick out of N (N=20 -> one frame per simulated second)
   formats: [npy]             # npy and/or ply

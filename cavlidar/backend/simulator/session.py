@@ -73,13 +73,17 @@ class SimulationSession:
         """Spawn scenario.num_cavs CAVs and scenario.num_traffic other vehicles."""
         sc = self.cfg.scenario
         candidates = vehicles.candidate_spawn_points(
-            self.world, self.rng, sc.spawn_center, sc.spawn_radius)
+            self.world, self.rng, sc.spawn_center, sc.spawn_radius, sc.spawn_bbox)
         self.cavs = vehicles.spawn_vehicles(
             self.world, sc.num_cavs, sc.cav_blueprint, candidates, self.rng, Role.CAV)
         self.traffic = vehicles.spawn_vehicles(
             self.world, sc.num_traffic, sc.traffic_blueprint, candidates, self.rng, Role.TRAFFIC)
-        if len(self.cavs) < sc.num_cavs:
-            raise SpawnError("Only {}/{} CAVs could be spawned".format(len(self.cavs), sc.num_cavs))
+        if len(self.cavs) < sc.num_cavs or len(self.traffic) < sc.num_traffic:
+            # A scenario with fewer vehicles than asked is not the scenario of the config
+            raise SpawnError(
+                "Only {}/{} CAVs and {}/{} traffic vehicles could be spawned. Lower "
+                "scenario.num_traffic or enlarge scenario.spawn_bbox.".format(
+                    len(self.cavs), sc.num_cavs, len(self.traffic), sc.num_traffic))
         if sc.autopilot:
             vehicles.enable_autopilot(self.cavs + self.traffic, self.tm,
                                       sc.speed_difference_range, sc.ignore_lights_range, self.rng)

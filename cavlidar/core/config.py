@@ -18,6 +18,7 @@ from typing import List, Optional
 
 import yaml
 
+from .constants import TM_START_SECONDS
 from .enums import CameraMode, PointFormat
 from .errors import ConfigError
 
@@ -47,6 +48,7 @@ class ScenarioConfig:
     traffic_blueprint: str = "vehicle.*"
     spawn_center: Optional[List[float]] = None
     spawn_radius: float = 80.0
+    spawn_bbox: Optional[List[float]] = None
     autopilot: bool = True
     speed_difference_range: List[float] = field(default_factory=lambda: [-20.0, 20.0])
     ignore_lights_range: List[float] = field(default_factory=lambda: [0.0, 0.0])
@@ -72,7 +74,7 @@ class LidarConfig:
 @dataclass
 class RecordingConfig:
     output_dir: str = "data/runs"
-    warmup_ticks: int = 20
+    warmup_ticks: int = 100
     num_frames: int = 10
     save_every: int = 1
     formats: List[PointFormat] = field(default_factory=lambda: [PointFormat.NPY])
@@ -134,6 +136,9 @@ def validate(cfg):
         errors.append("scenario.spawn_radius must be > 0")
     if sc.spawn_center is not None and len(sc.spawn_center) != 2:
         errors.append("scenario.spawn_center must be [x, y] or null")
+    if sc.spawn_bbox is not None and (len(sc.spawn_bbox) != 4 or sc.spawn_bbox[0] >= sc.spawn_bbox[1]
+                                      or sc.spawn_bbox[2] >= sc.spawn_bbox[3]):
+        errors.append("scenario.spawn_bbox must be [x_min, x_max, y_min, y_max] or null")
     for name in ("speed_difference_range", "ignore_lights_range"):
         lo_hi = getattr(sc, name)
         if len(lo_hi) != 2 or lo_hi[0] > lo_hi[1]:
@@ -168,6 +173,12 @@ def validate(cfg):
             "Each LiDAR scan covers {:.0f} degrees (rotation_frequency x fixed_delta_seconds = "
             "{:.2f}). Use fixed_delta_seconds = 1 / rotation_frequency for full 360-degree "
             "sweeps.".format(360.0 * min(sweep, 1.0), sweep))
+    warmup = rec.warmup_ticks * sim.fixed_delta_seconds
+    if sc.autopilot and warmup < TM_START_SECONDS:
+        warnings.append(
+            "Warm-up is only {:.2f} s: the Traffic Manager needs about {:.0f} s to start the "
+            "vehicles, so the first frames will show parked cars. Use recording.warmup_ticks >= "
+            "{:.0f}.".format(warmup, TM_START_SECONDS, TM_START_SECONDS / sim.fixed_delta_seconds))
     return warnings
 
 

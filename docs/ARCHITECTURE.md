@@ -84,7 +84,7 @@ Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`fra
 | Method | What it does |
 |---|---|
 | `__enter__` | connect → check map → enter `SyncMode` → seed the Traffic Manager. |
-| `spawn_fleet()` | Picks spawn points (around `spawn_center` if set), spawns CAVs then traffic, enables autopilot, ticks once. Raises `SpawnError` if not all CAVs fit. |
+| `spawn_fleet()` | Picks spawn points (inside `spawn_bbox`, around `spawn_center` if set), spawns CAVs then traffic, enables autopilot, ticks once. Raises `SpawnError` unless every CAV and traffic vehicle was spawned. |
 | `attach_lidars()` | One `Lidar` per CAV, named `cav0`, `cav1`, ... |
 | `read_scans(frame)` | The `LidarScan` of every CAV for that frame. |
 | `role_names()` | `{actor_id: "cav_0" / "traffic_3"}` for the ground truth. |
@@ -94,7 +94,7 @@ Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`fra
 ### `actors/vehicles.py`
 | Function | What it does |
 |---|---|
-| `candidate_spawn_points(world, rng, center, radius)` | Spawn points to try, in order: inside the radius first (shuffled), then the nearest outside. Without center: whole map shuffled. |
+| `candidate_spawn_points(world, rng, center, radius, bbox)` | Spawn points to try, in order: points outside `bbox` are dropped; then inside the radius first (shuffled), then the nearest outside. Without center: shuffled. |
 | `spawn_vehicles(world, count, pattern, candidates, rng, role)` | Spawns up to `count` 4-wheel vehicles matching `pattern`, consuming `candidates` so CAVs and traffic never share a spot. Sets `role_name` and a random colour. |
 | `enable_autopilot(vehicles, tm, speed_range, lights_range, rng)` | Autopilot with a random speed offset and red-light behaviour per vehicle. |
 | `destroy(client, actors)` | Removes actors in one batch. |
@@ -112,7 +112,7 @@ Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`fra
 `collect_vehicles(world, role_names)` — for every vehicle: id, model, role, pose, box half-sizes, box centre offset, speed. This is what detections will be compared to for AP@0.5.
 
 ### `recording/recorder.py`
-`record(session, run_dir)` — warm-up ticks (nothing saved), then saves one frame every `save_every` ticks until `num_frames`: point clouds + `meta.json`. Returns a `RecordSummary` (frames, mean points per scan).
+`record(session, run_dir)` — saves the initial poses (`spawn.json`), runs warm-up ticks (nothing saved), then saves one frame every `save_every` ticks until `num_frames`: point clouds + `meta.json`. Returns a `RecordSummary` (frames, mean points per scan, mean speed per CAV) and warns if every CAV stood still.
 
 ### `recording/storage.py`
 | Function | What it does |
@@ -129,6 +129,7 @@ Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`fra
 | `transform_to_dict(t)` | `carla.Transform` → `{x, y, z, roll, pitch, yaw}`. |
 | `pose_to_matrix(pose)` | 4×4 sensor→world matrix, same formula as CARLA. |
 | `sensor_to_world(points, pose)` | Moves a cloud into the world frame — the core operation of early (point-level) fusion. |
+| `in_bbox(x, y, bbox)` | Is a point inside `[x_min, x_max, y_min, y_max]`. |
 | `box_corners_2d(pose, extent, offset)` | 4 corners of a vehicle box seen from above. |
 
 CARLA uses a **left-handed** frame (x forward, y right, z up); all plots invert the y axis so they look like a top view.

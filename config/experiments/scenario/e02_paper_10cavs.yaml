@@ -5,6 +5,7 @@ scenario:
   num_traffic: 40
   spawn_center: [83.5, -134.7]
   spawn_radius: 120.0
+  spawn_bbox: [-100, 100, -200, 200]   # paper Table 1 spawn area
 recording:
   camera: top
   camera_height: 90.0

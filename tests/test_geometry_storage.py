@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from cavlidar.backend.geometry.transforms import box_corners_2d, pose_to_matrix, sensor_to_world
+from cavlidar.backend.geometry.transforms import box_corners_2d, in_bbox, pose_to_matrix, sensor_to_world
 from cavlidar.backend.recording import storage
 from cavlidar.core.enums import PointFormat, Role
 
@@ -27,6 +27,13 @@ class TestGeometry(unittest.TestCase):
         corners = box_corners_2d(pose, [2.0, 1.0, 0.7])
         self.assertEqual(corners.shape, (4, 2))
         np.testing.assert_allclose(sorted(corners[:, 0]), [-2, -2, 2, 2])
+
+    def test_in_bbox(self):
+        bbox = [-100, 100, -200, 200]
+        self.assertTrue(in_bbox(84.2, -105.2, bbox))
+        self.assertTrue(in_bbox(100, -200, bbox))
+        self.assertFalse(in_bbox(150.4, -125.8, bbox))  # e01 cav_1 before the fix
+        self.assertFalse(in_bbox(53.2, -203.1, bbox))   # e01 cav_3 before the fix
 
 
 class TestStorage(unittest.TestCase):

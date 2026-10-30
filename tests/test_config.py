@@ -48,10 +48,27 @@ class TestConfig(unittest.TestCase):
             load_config(DEFAULT_CONFIG, overrides=["lidar.lower_fov=5"])
 
     def test_partial_sweep_warning(self):
-        cfg = load_config(DEFAULT_CONFIG, overrides=["simulation.fixed_delta_seconds=0.01"])
+        cfg = load_config(DEFAULT_CONFIG, overrides=["simulation.fixed_delta_seconds=0.01",
+                                                     "recording.warmup_ticks=300"])
         warnings = validate(cfg)
         self.assertEqual(len(warnings), 1)
         self.assertIn("72 degrees", warnings[0])
+
+    def test_spawn_bbox(self):
+        cfg = load_config(DEFAULT_CONFIG, overrides=["scenario.spawn_bbox=[-100, 100, -200, 200]"])
+        self.assertEqual(cfg.scenario.spawn_bbox, [-100, 100, -200, 200])
+        with self.assertRaises(ConfigError):
+            load_config(DEFAULT_CONFIG, overrides=["scenario.spawn_bbox=[100, -100, -200, 200]"])
+        with self.assertRaises(ConfigError):
+            load_config(DEFAULT_CONFIG, overrides=["scenario.spawn_bbox=[0, 1]"])
+
+    def test_short_warmup_warning(self):
+        self.assertEqual(validate(load_config(DEFAULT_CONFIG)), [])
+        warnings = validate(load_config(DEFAULT_CONFIG, overrides=["recording.warmup_ticks=20"]))
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("Traffic Manager", warnings[0])
+        cfg = load_config(DEFAULT_CONFIG, overrides=["recording.warmup_ticks=20", "scenario.autopilot=false"])
+        self.assertEqual(validate(cfg), [])
 
     def test_save_and_reload_roundtrip(self):
         cfg = load_config(DEFAULT_CONFIG, overrides=["recording.formats=[npy, ply]"])

@@ -4,7 +4,6 @@ LiDAR data collection in the [CARLA](https://carla.org) simulator for **cooperat
 
 This repository is the first building block of a re-implementation of:
 
-> E. Besbes, H. Ghazzai, M. Elhadad, J. Farooq, A. Eltawil, G. Setti,
 > *Optimized BEV-Guided Point Cloud Sharing for Enhanced LiDAR-Based Collaborative Perception in CAVs* (IEEE Access, submitted 2026).
 
 It spawns CAVs and other traffic in **Town03**, mounts the paper's LiDAR on every CAV (32 channels, 120 m, 1M points/s, 20 Hz), and records **full 360° sweeps** together with the **sensor poses** and **ground-truth vehicle boxes**. These are the inputs needed later for ground removal, BEV sectorization, the sharing optimization (ILP / greedy-swap) and early fusion.
@@ -74,7 +73,8 @@ carla-lidar-cooperative-perception/
 └── docs/
     ├── ARCHITECTURE.md          every module and function explained
     ├── PARAMETERS.md            every parameter: meaning, effect, examples
-    └── EXPERIMENTS.md           the 10 experiments + ideas for new ones
+    ├── EXPERIMENTS.md           the 10 experiments + ideas for new ones
+    └── PAPER_FIDELITY.md        what matches the paper, what differs, what is unknown
 ```
 
 ```mermaid
@@ -97,6 +97,7 @@ The user only touches **YAML parameters** (or `--set`). `api.py` exposes simple 
 ```
 data/runs/2026-10-22_215825_e01/
 ├── config.yaml                 exact parameters used (reproducible)
+├── spawn.json                  every vehicle's initial pose, right after spawning
 ├── preview_sensor.png          each CAV in its own LiDAR frame
 ├── preview_world.png           all CAVs fused in the world frame + ground truth
 └── frames/361105/

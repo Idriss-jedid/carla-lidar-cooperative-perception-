@@ -49,7 +49,8 @@ Useful numbers for the LiDAR (paper settings):
 | `cav_blueprint` | `vehicle.tesla.model3` | CARLA model of the CAVs. | Any `vehicle.*` id, e.g. `vehicle.audi.tt`. A taller vehicle changes the LiDAR height above ground. |
 | `traffic_blueprint` | `vehicle.*` | Pattern for traffic models (only 4-wheel ones are used). | `vehicle.tesla.*` for one brand, `vehicle.carlamotors.carlacola` for trucks (big occluders). |
 | `spawn_center` | `null` | `[x, y]` to concentrate vehicles around a place. | `[83.5, -134.7]` = the sloped four-leg junction (paper-like). `null` = anywhere in the map. |
-| `spawn_radius` | `80.0` | Metres around `spawn_center`. | Smaller = denser scene, more overlap between CAVs (more redundancy). If not enough points fit, the nearest outside points are used. |
+| `spawn_radius` | `80.0` | Metres around `spawn_center` (a preference, not a limit). | Smaller = denser scene, more overlap between CAVs (more redundancy). If not enough points fit, the nearest outside points are used. |
+| `spawn_bbox` | `null` | `[x_min, x_max, y_min, y_max]` in world coordinates: spawn points outside are never used. | Paper Table 1: `[-100, 100, -200, 200]` (used by `e01`, `e02`). Too small a box → `SpawnError` (the run stops if it cannot spawn **every** CAV and traffic vehicle). |
 | `autopilot` | `true` | Vehicles drive themselves. | `false` = parked vehicles (static scene, every frame almost identical). |
 | `speed_difference_range` | `[-20, 20]` | Per-vehicle % **below** the speed limit (CARLA convention: +20 = 20 % slower, −20 = 20 % faster). | Paper: −20 %…+20 %. `[-50, -50]` = everyone 50 % over the limit. |
 | `ignore_lights_range` | `[0, 0]` | Per-vehicle % chance to run red lights. | Paper: 0–100 %. `[0, 100]` = mixed behaviour, more crossings in the junction. |
@@ -75,7 +76,7 @@ Useful numbers for the LiDAR (paper settings):
 | Key | Default | Meaning | If you change it |
 |---|---|---|---|
 | `output_dir` | `data/runs` | Where run folders are created. | Any path, e.g. `D:/datasets/cav`. |
-| `warmup_ticks` | `20` | Ticks before saving (1 s at 0.05 s/tick). | 100 → vehicles have time to spread out and get moving. |
+| `warmup_ticks` | `100` | Ticks before saving (5 s at 0.05 s/tick). | The Traffic Manager needs ~3 s to start the cars: below 60 ticks the first frames show parked cars (a warning is printed). 200 → vehicles spread out more. |
 | `num_frames` | `10` | Frames saved per run. | The paper uses one random timestamp per scenario; use more frames for a dataset. |
 | `save_every` | `1` | Save one tick out of N. | `20` → one frame per simulated second (less redundant frames). |
 | `formats` | `[npy]` | `npy` and/or `ply`. | Add `ply` to open clouds in MeshLab / CloudCompare (bigger, slower). |

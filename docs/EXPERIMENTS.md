@@ -7,7 +7,7 @@ python main.py record --config config/experiments/<group>/<file>.yaml --name <sh
 python main.py show data/runs/<run_folder> --view both
 ```
 
-Compare runs by looking at the `Done: … points per CAV scan` line, the two preview images, and `meta.json`.
+Compare runs by looking at the `Done: … points per CAV scan` and `Mean CAV speed` lines, the two preview images, `spawn.json` and `meta.json`.
 
 ## Ready-made experiments
 
@@ -15,9 +15,9 @@ Compare runs by looking at the `Done: … points per CAV scan` line, the two pre
 
 | File | Changes | What to observe |
 |---|---|---|
-| `e01_baseline_4cavs.yaml` | 4 CAVs + 20 vehicles within 80 m of the sloped junction (83.5, −134.7); camera above the junction. | Reference run. In `preview_world.png`, walls seen by two CAVs must overlap exactly; blind areas behind buildings and cars are visible. |
-| `e02_paper_10cavs.yaml` | 10 CAVs + 40 vehicles, radius 120 m. | Densest paper setting. Time per tick ≈ 0.15 s. Much more overlap between CAVs → much more redundant data (what the paper's optimization removes). |
-| `e08_chaotic_traffic.yaml` | 40 vehicles, up to 30 % over the limit, 0–100 % chance to run red lights. | More vehicles inside the junction at the same time; more occlusions. |
+| `e01_baseline_4cavs.yaml` | 4 CAVs + 20 vehicles near the sloped junction (83.5, −134.7), only inside the paper's spawn area x∈[−100, 100], y∈[−200, 200]; camera above the junction. | Reference run. In `preview_world.png`, walls seen by two CAVs must overlap exactly; blind areas behind buildings and cars are visible. |
+| `e02_paper_10cavs.yaml` | 10 CAVs + 40 vehicles, radius 120 m, paper spawn area. | Densest paper setting. Time per tick ≈ 0.15 s. Much more overlap between CAVs → much more redundant data (what the paper's optimization removes). |
+| `e08_chaotic_traffic.yaml` | 40 vehicles, up to 30 % over the limit, 0–100 % chance to run red lights. Not a paper baseline (paper: ±20 %). | More vehicles inside the junction at the same time; more occlusions. |
 
 ### `lidar/` — the sensor
 

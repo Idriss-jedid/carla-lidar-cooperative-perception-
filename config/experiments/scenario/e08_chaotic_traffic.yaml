@@ -1,5 +1,6 @@
 # Aggressive traffic: vehicles may run red lights and speed up to 30 % over
 # the limit (paper: traffic light compliance 0-100 % ignored).
+# Not a paper baseline: -30 % goes beyond the paper's -20 %..+20 % speed range.
 scenario:
   num_traffic: 40
   spawn_center: [83.5, -134.7]

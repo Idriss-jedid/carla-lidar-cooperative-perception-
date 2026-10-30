@@ -4,18 +4,25 @@ import math
 
 import carla
 
+from ..geometry.transforms import in_bbox
+
 log = logging.getLogger("cavlidar")
 
 
-def candidate_spawn_points(world, rng, center=None, radius=None):
+def candidate_spawn_points(world, rng, center=None, radius=None, bbox=None):
     """
     Return the map's spawn points in the order they should be tried.
 
-    Without a center: all points, shuffled.
+    With a bbox [x_min, x_max, y_min, y_max]: points outside it are dropped
+    (hard limit, paper Table 1 "Vehicle Spawn Area").
+    Without a center: the remaining points, shuffled.
     With a center [x, y]: the points within `radius` metres come first
     (shuffled), followed by the remaining points from nearest to farthest.
     """
     points = list(world.get_map().get_spawn_points())
+    if bbox is not None:
+        points = [p for p in points if in_bbox(p.location.x, p.location.y, bbox)]
+        log.info("%d spawn points inside bbox x[%.0f, %.0f] y[%.0f, %.0f]", len(points), *bbox)
     if center is None:
         rng.shuffle(points)
         return points
@@ -61,8 +68,6 @@ def spawn_vehicles(world, count, pattern, candidates, rng, role):
         vehicle = world.try_spawn_actor(bp, candidates.pop(0))
         if vehicle is not None:
             vehicles.append(vehicle)
-    if len(vehicles) < count:
-        log.warning("Only %d/%d %s vehicles could be spawned", len(vehicles), count, role)
     return vehicles
 
 

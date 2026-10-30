@@ -40,6 +40,11 @@ def sensor_to_world(points, pose):
     return out
 
 
+def in_bbox(x, y, bbox):
+    """True if (x, y) lies inside bbox = [x_min, x_max, y_min, y_max] (edges included)."""
+    return bbox[0] <= x <= bbox[1] and bbox[2] <= y <= bbox[3]
+
+
 def box_corners_2d(pose, extent, center_offset=(0.0, 0.0)):
     """Four (x, y) world corners of a vehicle bounding box seen from above."""
     yaw = math.radians(pose["yaw"])
