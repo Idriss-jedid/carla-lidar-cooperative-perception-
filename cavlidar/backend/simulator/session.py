@@ -127,6 +127,9 @@ class SimulationSession:
         speed_ids = {v.id for v in with_speed}
         autopilot = [v for v in everyone if v.id not in paths and (sc.autopilot or v.id in speed_ids)]
         vehicles.enable_autopilot(autopilot, self.tm, sc.speed_difference_range, sc.ignore_lights_range, self.rng)
+        driven = {v.id for v in autopilot} | set(paths)
+        parked = [v for v in everyone if v.id not in driven]
+        vehicles.park(parked)
         self.tick()  # make the new actors exist on the server (and know their speed limit)
         for v in with_speed:
             self.tm.vehicle_percentage_speed_difference(v, vehicles.tm_speed_difference(v, plans[v.id].speed_kmh))
@@ -137,7 +140,7 @@ class SimulationSession:
             for v in everyone if v.id in paths]
         log.info("Spawned %d CAVs and %d traffic vehicles (%d on a route, %d with the Traffic Manager, "
                  "%d parked)", len(self.cavs), len(self.traffic), len(self.drivers), len(autopilot),
-                 len(everyone) - len(self.drivers) - len(autopilot))
+                 len(parked))
 
     def _trace_routes(self, planned):
         """{(role, index in the plan): Route} for the planned vehicles that have a route."""

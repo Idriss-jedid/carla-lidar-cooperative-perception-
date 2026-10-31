@@ -100,6 +100,16 @@ def spawn_at_poses(world, poses, pattern, rng, role):
     return vehicles
 
 
+def park(vehicles):
+    """
+    Hold vehicles that nobody drives with the brake and hand brake. Without it a
+    parked car rolls away on a slope (Town03's +x leg of junction 1221 is 12 deg).
+    A control stays applied until another one is sent.
+    """
+    for vehicle in vehicles:
+        vehicle.apply_control(carla.VehicleControl(throttle=0.0, brake=1.0, hand_brake=True))
+
+
 def enable_autopilot(vehicles, tm, speed_difference_range, ignore_lights_range, rng):
     """
     Hand the vehicles to the Traffic Manager with randomised behaviour.
