@@ -15,9 +15,11 @@ Compare runs by looking at the `Done: … points per CAV scan` and `Mean CAV spe
 
 | File | Changes | What to observe |
 |---|---|---|
-| `e01_baseline_4cavs.yaml` | 4 CAVs + 20 vehicles near the sloped junction (83.5, −134.7), only inside the paper's spawn area x∈[−100, 100], y∈[−200, 200]; camera above the junction. | Reference run. In `preview_world.png`, walls seen by two CAVs must overlap exactly; blind areas behind buildings and cars are visible. |
+| `e01_baseline_4cavs.yaml` | 4 CAVs + 20 vehicles at random spawn points around the Figure 2 junction (2.9, −136.5), only inside the paper's spawn area x∈[−100, 100], y∈[−200, 200]; camera above the junction. | Reference run. In `preview_world.png`, walls seen by two CAVs must overlap exactly; blind areas behind buildings and cars are visible. |
 | `e02_paper_10cavs.yaml` | 10 CAVs + 40 vehicles, radius 120 m, paper spawn area. | Densest paper setting. Time per tick ≈ 0.15 s. Much more overlap between CAVs → much more redundant data (what the paper's optimization removes). |
 | `e08_chaotic_traffic.yaml` | 40 vehicles, up to 30 % over the limit, 0–100 % chance to run red lights. Not a paper baseline (paper: ±20 %). | More vehicles inside the junction at the same time; more occlusions. |
+| `e11_figure2_exact.yaml` | The paper's Figure 2: 4 CAVs + 11 vehicles at the drawn positions, parked. | Same layout as the figure (image below). The reference scene for checking occlusions: e.g. CAV 0 in the junction hides part of the right arm from CAV 3. |
+| `e12_figure2_driving.yaml` | Starts from Figure 2, adds 9 random vehicles (20 non-CAVs), everyone drives, 1 frame per second. | How the Figure 2 scene evolves; red lights run 0–100 %. |
 
 ### `lidar/` — the sensor
 
@@ -38,6 +40,10 @@ Compare runs by looking at the `Done: … points per CAV scan` and `Mean CAV spe
 
 ![e09: partial sweeps](images/e09_partial_sweep.png)
 
+![e11: the paper's Figure 2 re-created in CARLA (blue = CAV, red = other vehicle)](images/figure2_town03.png)
+
+*`e11`: the vehicles of the paper's Figure 2 on Town03 junction 1221. To rebuild the plan: `python tools/make_figure2_plan.py` (CARLA running).*
+
 ## New cases to try
 
 Write a new YAML (or use `--set`). Ideas, from easy to closer to the paper:
@@ -50,7 +56,7 @@ Write a new YAML (or use `--set`). Ideas, from easy to closer to the paper:
 6. **Sensor on the bumper** — `--set lidar.mount_x=2.3 --set lidar.mount_z=0.7`: the car's own body hides everything behind it.
 7. **Wide vertical field** — `--set lidar.upper_fov=15 --set lidar.lower_fov=-25`: more points on buildings, fewer on the road.
 8. **10 Hz LiDAR** — `--set lidar.rotation_frequency=10 --set simulation.fixed_delta_seconds=0.1`: twice the points per sweep, half the frames per second.
-9. **Another junction** — other large Town03 junctions: `[-82.4, -138.2]`, `[2.9, -136.5]`, `[1.1, 133.7]`. Use `--set scenario.spawn_center=[x,y] --set recording.camera=top`.
+9. **Another junction** — other large Town03 junctions: `[83.5, -134.7]` (top of the sloped leg), `[-82.4, -138.2]`, `[1.1, 133.7]`. Use `--set scenario.spawn_center=[x,y] --set recording.camera=top`.
 10. **Fast dataset collection** — `--set simulation.no_rendering=true --set recording.preview=false --set recording.num_frames=100`.
 
 When a case is useful, save it as a new file in the right group folder (`scenario/`, `lidar/`, `recording/`) with the next number (`e11_…`), and add a line to this page.

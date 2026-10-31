@@ -30,6 +30,7 @@ Useful numbers for the LiDAR (paper settings):
 | `tm_port` | `8000` | Traffic Manager port. | Change if two scripts run at once. |
 | `timeout` | `60.0` | Seconds before a request fails. | Increase if the map is slow to load; decrease to fail faster. |
 | `town` | `Town03` | Map the scripts expect (the paper uses Town03). | `Town01`…`Town10HD`. The server must have that map loaded. |
+| `carla_root` | `null` | CARLA folder (the one with `CarlaUE4.exe`). Used by the editor to list maps and set the startup map. | `D:/CARLA/CARLA_0.9.12/WindowsNoEditor`. `null` = the editor asks once and remembers it. |
 | `allow_map_change` | `false` | Call `load_world()` if another map is loaded. | `true` lets scripts change the map, but this crashed CARLA on the 4 GB GPU. Safer: edit `GameDefaultMap`/`ServerDefaultMap` in `CarlaUE4/Config/DefaultEngine.ini` and restart CARLA. |
 
 ## `simulation`
@@ -48,9 +49,10 @@ Useful numbers for the LiDAR (paper settings):
 | `num_traffic` | `20` | Vehicles without sensors. | Paper: 20–40. More = more occlusions and more objects to detect. |
 | `cav_blueprint` | `vehicle.tesla.model3` | CARLA model of the CAVs. | Any `vehicle.*` id, e.g. `vehicle.audi.tt`. A taller vehicle changes the LiDAR height above ground. |
 | `traffic_blueprint` | `vehicle.*` | Pattern for traffic models (only 4-wheel ones are used). | `vehicle.tesla.*` for one brand, `vehicle.carlamotors.carlacola` for trucks (big occluders). |
-| `spawn_center` | `null` | `[x, y]` to concentrate vehicles around a place. | `[83.5, -134.7]` = the sloped four-leg junction (paper-like). `null` = anywhere in the map. |
+| `spawn_center` | `null` | `[x, y]` to concentrate vehicles around a place. | `[2.9, -136.5]` = junction 1221, the junction of the paper's Figure 2 (its +x leg is the sloped one). `null` = anywhere in the map. |
 | `spawn_radius` | `80.0` | Metres around `spawn_center` (a preference, not a limit). | Smaller = denser scene, more overlap between CAVs (more redundancy). If not enough points fit, the nearest outside points are used. |
 | `spawn_bbox` | `null` | `[x_min, x_max, y_min, y_max]` in world coordinates: spawn points outside are never used. | Paper Table 1: `[-100, 100, -200, 200]` (used by `e01`, `e02`). Too small a box → `SpawnError` (the run stops if it cannot spawn **every** CAV and traffic vehicle). |
+| `spawn_plan` | `null` | JSON file with exact start poses (`config/spawn_plans/`). Planned vehicles are spawned first; if `num_cavs` / `num_traffic` ask for more, the rest are spawned at random points. | `config/spawn_plans/figure2_town03.json` = the 4 CAVs + 11 vehicles of the paper's Figure 2 (`e11`, `e12`). Fails if a planned spot is blocked, if the plan has more vehicles than the config, or if a planned vehicle is outside `spawn_bbox`. |
 | `autopilot` | `true` | Vehicles drive themselves. | `false` = parked vehicles (static scene, every frame almost identical). |
 | `speed_difference_range` | `[-20, 20]` | Per-vehicle % **below** the speed limit (CARLA convention: +20 = 20 % slower, −20 = 20 % faster). | Paper: −20 %…+20 %. `[-50, -50]` = everyone 50 % over the limit. |
 | `ignore_lights_range` | `[0, 0]` | Per-vehicle % chance to run red lights. | Paper: 0–100 %. `[0, 100]` = mixed behaviour, more crossings in the junction. |

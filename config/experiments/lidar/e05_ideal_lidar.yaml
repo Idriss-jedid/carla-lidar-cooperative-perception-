@@ -1,7 +1,7 @@
 # No random point drop-off: every ray that hits something returns a point.
 # Shows how much CARLA's default dropoff (45 %) removes.
 scenario:
-  spawn_center: [83.5, -134.7]
+  spawn_center: [2.9, -136.5]
 lidar:
   dropoff_general_rate: 0.0
   dropoff_intensity_limit: 1.0

@@ -55,17 +55,17 @@ def record(session, run_dir):
     if scans:
         summary.mean_points_per_cav = total_points / float(len(summary.frames) * len(scans))
     summary.mean_cav_speed_kmh = {name: sum(v) / len(v) for name, v in speeds.items()}
-    _check_motion(summary.mean_cav_speed_kmh)
+    _check_motion(summary.mean_cav_speed_kmh, session.cfg.scenario.autopilot)
     return summary
 
 
-def _check_motion(mean_speed_kmh):
-    """Log CAV speeds; warn when none of them moved (e.g. warm-up too short)."""
+def _check_motion(mean_speed_kmh, autopilot):
+    """Log CAV speeds; warn when none of them moved although they drive (e.g. warm-up too short)."""
     if not mean_speed_kmh:
         return
     log.info("Mean CAV speed (km/h): %s", ", ".join(
         "{}={:.1f}".format(n, s) for n, s in sorted(mean_speed_kmh.items())))
-    if all(s < STATIONARY_KMH for s in mean_speed_kmh.values()):
+    if autopilot and all(s < STATIONARY_KMH for s in mean_speed_kmh.values()):
         log.warning("Every CAV stayed below %.0f km/h during the recording: the scene is static. "
                     "Increase recording.warmup_ticks or record longer.", STATIONARY_KMH)
 

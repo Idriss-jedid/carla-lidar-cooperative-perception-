@@ -1,5 +1,5 @@
 # Realistic range noise (5 cm standard deviation along each ray).
 scenario:
-  spawn_center: [83.5, -134.7]
+  spawn_center: [2.9, -136.5]
 lidar:
   noise_stddev: 0.05

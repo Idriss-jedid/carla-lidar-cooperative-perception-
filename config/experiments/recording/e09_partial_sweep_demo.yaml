@@ -3,7 +3,7 @@
 simulation:
   fixed_delta_seconds: 0.01
 scenario:
-  spawn_center: [83.5, -134.7]
+  spawn_center: [2.9, -136.5]
 recording:
   warmup_ticks: 300   # 3 s at 0.01 s per tick
   num_frames: 5

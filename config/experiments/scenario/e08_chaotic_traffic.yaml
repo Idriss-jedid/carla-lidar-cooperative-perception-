@@ -3,6 +3,6 @@
 # Not a paper baseline: -30 % goes beyond the paper's -20 %..+20 % speed range.
 scenario:
   num_traffic: 40
-  spawn_center: [83.5, -134.7]
+  spawn_center: [2.9, -136.5]
   speed_difference_range: [-30, 20]
   ignore_lights_range: [0, 100]

@@ -16,7 +16,7 @@ import random
 from ...core.constants import CAV_CLOUD_NAME
 from ...core.enums import CameraMode, Role
 from ...core.errors import SpawnError
-from ..actors import vehicles
+from ..actors import spawn_plan, vehicles
 from . import camera, connection
 from ..actors.lidar import Lidar
 from .sync import SyncMode
@@ -70,14 +70,35 @@ class SimulationSession:
 
     # ------------------------------------------------------------------ actors
     def spawn_fleet(self):
-        """Spawn scenario.num_cavs CAVs and scenario.num_traffic other vehicles."""
+        """
+        Spawn scenario.num_cavs CAVs and scenario.num_traffic other vehicles:
+        first the ones fixed by scenario.spawn_plan (if any), then the rest at
+        random spawn points.
+        """
         sc = self.cfg.scenario
+        planned = {Role.CAV: [], Role.TRAFFIC: []}
+        if sc.spawn_plan:
+            planned = spawn_plan.load_plan(sc.spawn_plan, self.cfg.server.town,
+                                           sc.num_cavs, sc.num_traffic, sc.spawn_bbox)
+        self.cavs = vehicles.spawn_at_poses(
+            self.world, planned[Role.CAV], sc.cav_blueprint, self.rng, Role.CAV)
+        self.traffic = vehicles.spawn_at_poses(
+            self.world, planned[Role.TRAFFIC], sc.traffic_blueprint, self.rng, Role.TRAFFIC)
+        if len(self.cavs) < len(planned[Role.CAV]) or len(self.traffic) < len(planned[Role.TRAFFIC]):
+            # Filling the gap at random would silently change the planned scene
+            raise SpawnError("Only {}/{} planned CAVs and {}/{} planned traffic vehicles could be "
+                             "spawned from {}".format(len(self.cavs), len(planned[Role.CAV]),
+                                                     len(self.traffic), len(planned[Role.TRAFFIC]),
+                                                     sc.spawn_plan))
+
         candidates = vehicles.candidate_spawn_points(
             self.world, self.rng, sc.spawn_center, sc.spawn_radius, sc.spawn_bbox)
-        self.cavs = vehicles.spawn_vehicles(
-            self.world, sc.num_cavs, sc.cav_blueprint, candidates, self.rng, Role.CAV)
-        self.traffic = vehicles.spawn_vehicles(
-            self.world, sc.num_traffic, sc.traffic_blueprint, candidates, self.rng, Role.TRAFFIC)
+        self.cavs += vehicles.spawn_vehicles(
+            self.world, sc.num_cavs - len(self.cavs), sc.cav_blueprint, candidates, self.rng,
+            Role.CAV, first_index=len(self.cavs))
+        self.traffic += vehicles.spawn_vehicles(
+            self.world, sc.num_traffic - len(self.traffic), sc.traffic_blueprint, candidates, self.rng,
+            Role.TRAFFIC, first_index=len(self.traffic))
         if len(self.cavs) < sc.num_cavs or len(self.traffic) < sc.num_traffic:
             # A scenario with fewer vehicles than asked is not the scenario of the config
             raise SpawnError(

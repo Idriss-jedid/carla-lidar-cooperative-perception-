@@ -8,6 +8,7 @@ server:
   timeout: 60.0            # seconds before a request to CARLA fails
   town: Town03             # map the paper uses
   allow_map_change: false  # true = call load_world() if another map is loaded (crashed on 4 GB GPU)
+  carla_root: null         # CARLA folder (WindowsNoEditor) for the editor's map list; null = ask once
 
 simulation:
   fixed_delta_seconds: 0.05  # seconds of simulated time per tick; keep = 1 / lidar.rotation_frequency
@@ -22,6 +23,7 @@ scenario:
   spawn_center: null                  # [x, y] to spawn around a place, null = whole map
   spawn_radius: 80.0                  # metres around spawn_center (preference, not a limit)
   spawn_bbox: null                    # [x_min, x_max, y_min, y_max] hard spawn limit, null = none
+  spawn_plan: null                    # JSON file with fixed start poses (config/spawn_plans/), null = none
   autopilot: true                     # vehicles drive themselves (Traffic Manager)
   speed_difference_range: [-20, 20]   # % below speed limit, drawn per vehicle (paper: -20%..+20%)
   ignore_lights_range: [0, 0]         # % chance to run red lights, per vehicle (paper: 0-100%)

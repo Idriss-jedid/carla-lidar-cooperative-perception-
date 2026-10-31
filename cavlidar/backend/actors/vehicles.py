@@ -8,6 +8,9 @@ from ..geometry.transforms import in_bbox
 
 log = logging.getLogger("cavlidar")
 
+# Metres above a lane waypoint at which planned vehicles are dropped (avoids ground collision)
+SPAWN_LIFT = 0.4
+
 
 def candidate_spawn_points(world, rng, center=None, radius=None, bbox=None):
     """
@@ -49,25 +52,51 @@ def _blueprints(world, pattern):
     return bps
 
 
-def spawn_vehicles(world, count, pattern, candidates, rng, role):
+def _pick_blueprint(blueprints, rng, role, index):
+    bp = rng.choice(blueprints)
+    if bp.has_attribute("role_name"):
+        bp.set_attribute("role_name", role.name_of(index))
+    if bp.has_attribute("color"):
+        bp.set_attribute("color", rng.choice(bp.get_attribute("color").recommended_values))
+    return bp
+
+
+def spawn_vehicles(world, count, pattern, candidates, rng, role, first_index=0):
     """
     Spawn up to `count` vehicles, consuming points from the front of `candidates`.
 
     `candidates` is modified in place, so successive calls (CAVs, then traffic)
-    never reuse a spawn point. Vehicle i gets CARLA role_name role.name_of(i),
-    e.g. 'cav_0'. Returns the list of spawned actors (may be shorter than count).
+    never reuse a spawn point. Vehicle i gets CARLA role_name
+    role.name_of(first_index + i), e.g. 'cav_0'. Returns the list of spawned
+    actors (may be shorter than count).
     """
     blueprints = _blueprints(world, pattern)
     vehicles = []
     while len(vehicles) < count and candidates:
-        bp = rng.choice(blueprints)
-        if bp.has_attribute("role_name"):
-            bp.set_attribute("role_name", role.name_of(len(vehicles)))
-        if bp.has_attribute("color"):
-            bp.set_attribute("color", rng.choice(bp.get_attribute("color").recommended_values))
+        bp = _pick_blueprint(blueprints, rng, role, first_index + len(vehicles))
         vehicle = world.try_spawn_actor(bp, candidates.pop(0))
         if vehicle is not None:
             vehicles.append(vehicle)
+    return vehicles
+
+
+def spawn_at_poses(world, poses, pattern, rng, role):
+    """
+    Spawn one vehicle at each pose of a spawn plan, named role_0, role_1, ...
+    Returns the spawned actors; a pose that is blocked is logged and skipped.
+    """
+    blueprints = _blueprints(world, pattern)
+    vehicles = []
+    for pose in poses:
+        bp = _pick_blueprint(blueprints, rng, role, len(vehicles))
+        transform = carla.Transform(
+            carla.Location(x=pose["x"], y=pose["y"], z=pose["z"] + SPAWN_LIFT),
+            carla.Rotation(pitch=pose.get("pitch", 0.0), yaw=pose["yaw"], roll=pose.get("roll", 0.0)))
+        vehicle = world.try_spawn_actor(bp, transform)
+        if vehicle is None:
+            log.warning("Planned %s at (%.1f, %.1f) is blocked", role, pose["x"], pose["y"])
+            continue
+        vehicles.append(vehicle)
     return vehicles
 
 

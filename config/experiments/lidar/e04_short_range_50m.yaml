@@ -1,5 +1,5 @@
 # Cheaper sensor: 50 m range. Far vehicles disappear -> more need for cooperation.
 scenario:
-  spawn_center: [83.5, -134.7]
+  spawn_center: [2.9, -136.5]
 lidar:
   range: 50.0

@@ -1,11 +1,12 @@
-# Paper-like starting point: 4 CAVs + 20 vehicles around the sloped four-leg
-# junction of Town03 (x=83.5, y=-134.7, z=8). Spawn points are limited to the
+# Paper-like starting point: 4 CAVs + 20 vehicles at random spawn points around
+# the junction of the paper's Figure 2 (Town03 junction 1221, x=2.9, y=-136.5;
+# its +x leg climbs to z=8 m = the sloped leg). Spawn points are limited to the
 # paper's spawn area (Table 1: x in [-100, 100], y in [-200, 200], read here
 # as CARLA world coordinates).
 scenario:
   num_cavs: 4
   num_traffic: 20
-  spawn_center: [83.5, -134.7]
+  spawn_center: [2.9, -136.5]
   spawn_radius: 80.0
   spawn_bbox: [-100, 100, -200, 200]
 recording:

@@ -1,0 +1,17 @@
+# Starts from the paper's Figure 2 (4 CAVs + 11 vehicles at the drawn positions),
+# adds 9 random vehicles inside the paper's spawn area to reach 20 non-CAVs
+# (Table 1: 20-40), then lets everyone drive. One frame per simulated second.
+scenario:
+  num_cavs: 4
+  num_traffic: 20
+  spawn_center: [2.9, -136.5]
+  spawn_radius: 80.0
+  spawn_bbox: [-100, 100, -200, 200]
+  spawn_plan: config/spawn_plans/figure2_town03.json
+  ignore_lights_range: [0, 100]
+recording:
+  warmup_ticks: 100
+  num_frames: 10
+  save_every: 20
+  camera: top
+  camera_height: 70.0

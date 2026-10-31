@@ -105,6 +105,57 @@ def record_lidar(cfg, name="run"):
     return run_dir
 
 
+def open_editor(cfg, town=None, plan=None):
+    """
+    Open the scenario editor window: place CAVs and traffic by hand on any
+    CARLA map, then export an experiment and record it. Works without CARLA
+    running (maps are read from CARLA's OpenDRIVE files).
+    """
+    from .editor import app
+
+    app.run(cfg, town, plan)
+
+
+def import_openscenario(cfg, xosc_path, name, extra_traffic=0, autopilot=True, num_frames=10, save_every=20):
+    """
+    Turn an OpenSCENARIO file (e.g. made with CARLA's QGIS Traffic Generation
+    Editor) into a spawn plan + experiment YAML ready for record_lidar.
+    Ego vehicles become CAVs, other vehicles traffic. Returns
+    (plan_path, yaml_path, warnings); warnings list what could not be imported.
+    """
+    from .backend.interop.openscenario import read_xosc
+    from .editor import export, settings
+    from .editor.openscenario_bridge import plan_from_xosc
+
+    from .core.errors import ConfigError
+
+    town = read_xosc(xosc_path).town
+    road_map = settings.road_map(cfg, town)
+    if road_map is None:
+        raise ConfigError("No OpenDRIVE file for map '{}': set server.carla_root to the CARLA folder".format(town))
+    plan, warnings = plan_from_xosc(xosc_path, road_map)
+    options = export.ExportOptions(name, extra_traffic, autopilot, num_frames, save_every)
+    try:
+        plan_path, yaml_path = export.export(plan, options)
+    except ValueError as exc:  # no ego vehicle, bad name
+        raise ConfigError("{} ({})".format(exc, "; ".join(warnings) or "no warnings"))
+    for w in warnings:
+        log.warning(w)
+    log.info("%s -> %s (%d CAVs, %d traffic) and %s", xosc_path, plan_path, *plan.counts().values(), yaml_path)
+    return plan_path, yaml_path, warnings
+
+
+def export_openscenario(cfg, plan_path, xosc_path, duration=60.0):
+    """Write a spawn plan as an OpenSCENARIO file (QGIS editor, ScenarioRunner)."""
+    from .editor.model import ScenarioPlan
+    from .editor.openscenario_bridge import xosc_from_plan
+
+    plan = ScenarioPlan.load(plan_path)
+    xosc_from_plan(plan, xosc_path, cfg.scenario.cav_blueprint, cfg.scenario.traffic_blueprint, duration)
+    log.info("%s -> %s (%d vehicles)", plan_path, xosc_path, len(plan.vehicles))
+    return xosc_path
+
+
 def show_frame(run_dir, frame=None, view=ViewMode.BOTH):
     """
     Save BEV plots of one recorded frame (default: the last one) into the run

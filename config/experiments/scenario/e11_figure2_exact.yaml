@@ -1,0 +1,16 @@
+# The scene of the paper's Figure 2, frozen: 4 CAVs + 11 other vehicles at the
+# positions drawn on the figure (Town03 junction 1221). Vehicles stay parked, so
+# every frame shows exactly the figure's layout. How the plan was measured:
+# tools/make_figure2_plan.py
+scenario:
+  num_cavs: 4
+  num_traffic: 11
+  spawn_center: [2.9, -136.5]
+  spawn_bbox: [-100, 100, -200, 200]
+  spawn_plan: config/spawn_plans/figure2_town03.json
+  autopilot: false
+recording:
+  warmup_ticks: 20      # let the dropped vehicles settle on the road
+  num_frames: 3
+  camera: top
+  camera_height: 60.0

@@ -7,7 +7,8 @@ How close this repository is to the setup of the paper (Section III, Table 1). T
 | Parameter | Paper | Here |
 |---|---|---|
 | Map | CARLA Town 3 | `server.town: Town03` |
-| Intersection | four legs, one sloped | `spawn_center: [83.5, -134.7]` (junction at z = 8 m; the leg towards y = −200 slopes down to z = 0) |
+| Intersection | four legs, one sloped (Figure 2) | Junction 1221, `spawn_center: [2.9, -136.5]`: same buildings as Figure 2; its +x leg climbs from z = 0 to 8 m within 60 m |
+| Figure 2 scene | 4 CAVs + 11 vehicles | `config/spawn_plans/figure2_town03.json` (`e11`, `e12`), positions within 1.2 m of the figure |
 | CAVs per scenario | 4, 6, 8, 10 | `scenario.num_cavs` |
 | Non-CAVs per scenario | 20–40 | `scenario.num_traffic` |
 | LiDAR | 32 channels, 120 m, 1,000,000 pts/s, 20 Hz | `lidar.*` defaults |
@@ -27,7 +28,7 @@ How close this repository is to the setup of the paper (Section III, Table 1). T
 
 ## Not specified in the paper (our choices)
 
-LiDAR vertical field of view (+2° / −25°), mount height (2.4 m), drop-off rates (CARLA defaults), noise (0), warm-up length, which timestamp is saved per scenario, and the random seeds. Whether the spawn box is in world coordinates (used here) or relative to the intersection is also not stated: in world coordinates the east leg of the junction (x > 100) gets no spawned vehicles.
+LiDAR vertical field of view (+2° / −25°), mount height (2.4 m), drop-off rates (CARLA defaults), noise (0), warm-up length, which timestamp is saved per scenario, and the random seeds. The paper does not say whether the spawn box is in world coordinates or relative to the intersection. World coordinates are used here: the Figure 2 junction (2.9, −136.5) sits in the middle of x ∈ [−100, 100], y ∈ [−200, 200], which supports this reading.
 
 ## Fixed after checking the recorded data (2026-10-30)
 
@@ -37,3 +38,7 @@ LiDAR vertical field of view (+2° / −25°), mount height (2.4 m), drop-off ra
 | 2 of 4 CAVs and 11 of 20 vehicles spawned outside the paper's spawn area | radius around the junction, with fallback to farther points | `scenario.spawn_bbox` (hard limit) |
 | Fewer traffic vehicles than requested only gave a warning | — | `SpawnError` unless every vehicle is spawned |
 | Initial poses not saved | — | `spawn.json` in every run |
+
+## Finding the Figure 2 junction (2026-10-31)
+
+Earlier runs used junction 356 (83.5, −134.7), which is the *top* of the sloped leg, not the junction of Figure 2. A top-down photo of each of the 25 Town03 junctions was compared with Figure 2: junction 1221 matches (brick houses top-left, beige apartment block top-right, pink plaza bottom-right, curved façade bottom-left, same orientation: figure up = +x). The vehicle boxes drawn on the figure were converted to world coordinates with the junction as scale reference and snapped to lanes with the matching direction (`tools/make_figure2_plan.py`). All experiments now use this junction.

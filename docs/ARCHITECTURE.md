@@ -4,7 +4,7 @@ The code is split in three layers. Each layer only calls the one below it.
 
 | Layer | Folder | Who uses it | Depends on CARLA? |
 |---|---|---|---|
-| **Front** | `main.py`, `cavlidar/api.py` | you | no (imports backend lazily) |
+| **Front** | `main.py`, `cavlidar/api.py`, `cavlidar/editor/` | you | no (imports backend lazily) |
 | **Core** | `cavlidar/core/` | everything | no |
 | **Backend** | `cavlidar/backend/` | `api.py` only | `simulator/`, `actors/`, `recording/recorder.py` yes; the rest no |
 
@@ -27,8 +27,22 @@ Design rules:
 | `drive_cars(cfg, seconds=40)` | Spawns the scenario's CAVs and traffic with autopilot and paces the simulation to real time so you can watch. Saves nothing. |
 | `record_lidar(cfg, name="run")` | Creates `data/runs/<date>_<time>_<name>/`, saves `config.yaml`, spawns vehicles, mounts one LiDAR per CAV, records frames, saves previews. Returns the run folder. |
 | `show_frame(run_dir, frame=None, view="both")` | Plots one recorded frame (default: the last). `view`: `sensor`, `world` or `both`. Works without CARLA. |
+| `open_editor(cfg, town=None, plan=None)` | Opens the scenario editor window (see [EDITOR.md](EDITOR.md)). |
+| `import_openscenario(cfg, xosc, name, ...)` | `.xosc` → spawn plan + experiment YAML; returns the paths and the warnings (see [OPENSCENARIO.md](OPENSCENARIO.md)). |
+| `export_openscenario(cfg, plan, xosc)` | Spawn plan → `.xosc` for the QGIS editor / ScenarioRunner. |
 
-`main.py` is a thin command-line wrapper around these five functions.
+`main.py` is a thin command-line wrapper around these functions.
+
+## Front: `cavlidar/editor/`
+
+| Module | Role |
+|---|---|
+| `model.py` | `ScenarioPlan`: the vehicles being edited, names (`cav_0`...), overlap test, spawn-area check, undo/redo, load/save. No window, no CARLA: unit-tested. |
+| `map_view.py` | `MapView`: Tk canvas showing a georeferenced image with zoom around the cursor and pan; redraws the image only when the view changes. |
+| `export.py` | Plan + experiment YAML files, command line for recording. |
+| `openscenario_bridge.py` | `.xosc` ↔ `ScenarioPlan`: heights from the road, LanePosition / RoadPosition on the map, warnings for off-lane or wrong-way vehicles. |
+| `settings.py` | CARLA folder and map cache shared by the window and the API. |
+| `app.py` | The window: toolbar, map, Vehicles / Rules / CARLA / Export tabs. CARLA calls run on a background thread so the window never freezes. |
 
 ## Core: `cavlidar/core/`
 
@@ -84,7 +98,7 @@ Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`fra
 | Method | What it does |
 |---|---|
 | `__enter__` | connect → check map → enter `SyncMode` → seed the Traffic Manager. |
-| `spawn_fleet()` | Picks spawn points (inside `spawn_bbox`, around `spawn_center` if set), spawns CAVs then traffic, enables autopilot, ticks once. Raises `SpawnError` unless every CAV and traffic vehicle was spawned. |
+| `spawn_fleet()` | Spawns the vehicles of `spawn_plan` (if any) at their exact poses, then the rest at spawn points (inside `spawn_bbox`, around `spawn_center` if set), enables autopilot, ticks once. Raises `SpawnError` unless every CAV and traffic vehicle was spawned. |
 | `attach_lidars()` | One `Lidar` per CAV, named `cav0`, `cav1`, ... |
 | `read_scans(frame)` | The `LidarScan` of every CAV for that frame. |
 | `role_names()` | `{actor_id: "cav_0" / "traffic_3"}` for the ground truth. |
@@ -97,7 +111,11 @@ Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`fra
 | `candidate_spawn_points(world, rng, center, radius, bbox)` | Spawn points to try, in order: points outside `bbox` are dropped; then inside the radius first (shuffled), then the nearest outside. Without center: shuffled. |
 | `spawn_vehicles(world, count, pattern, candidates, rng, role)` | Spawns up to `count` 4-wheel vehicles matching `pattern`, consuming `candidates` so CAVs and traffic never share a spot. Sets `role_name` and a random colour. |
 | `enable_autopilot(vehicles, tm, speed_range, lights_range, rng)` | Autopilot with a random speed offset and red-light behaviour per vehicle. |
+| `spawn_at_poses(world, poses, pattern, rng, role)` | Spawns one vehicle per planned pose (used for `spawn_plan`). |
 | `destroy(client, actors)` | Removes actors in one batch. |
+
+### `actors/spawn_plan.py`
+`load_plan(path, town, num_cavs, num_traffic, bbox)` — reads a spawn plan (JSON) and checks it against the config: map, roles, counts, `spawn_bbox`. Returns the poses per role. No CARLA needed. Relative paths are looked up in the current folder, then in the project folder.
 
 ### `actors/lidar.py`
 | Item | What it does |
@@ -122,6 +140,23 @@ Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`fra
 | `write_ply`, `read_ply` | Binary PLY writer; reader for binary and ASCII (CARLA's own `save_to_disk`). |
 | `load_points`, `save_json`, `load_json` | Small helpers. |
 | `list_frames(run_dir)`, `load_frame(run_dir, frame)` | Read a run back: `(meta, {"cav0": points, ...})`. |
+
+### `maps/` (no running simulator needed, except `aerial.py`)
+| Module | What it does |
+|---|---|
+| `catalog.py` | Lists maps from the CARLA folder: OpenDRIVE file (editable) and level `.umap` (simulable). |
+| `road_map.py` | `RoadMap`: `carla.Map` built on the client from OpenDRIVE; `snap(x, y)` → legal lane pose (heading, height, slope); `bounds()`. |
+| `raster.py` | `Georef` (world ↔ pixels) and the road image (lanes, sidewalks, markings, direction arrows), cached in `data/maps/`. |
+| `aerial.py` | Aerial photo of the loaded map: camera 1000 m up, tiles stitched with the same `Georef` as the road image. |
+
+### `interop/openscenario.py` (no CARLA needed)
+`read_xosc(path)` → map, vehicles (role, model, CARLA pose or lane position, speed), warnings. `write_xosc(path, town, vehicles)` → OpenSCENARIO 1.0 in the QGIS editor's layout. `to_carla` / `from_carla`: OpenDRIVE ↔ CARLA frame, same rule as ScenarioRunner.
+
+### `simulator/live.py`, `simulator/startup_map.py`
+`draw_plan` / `test_spawn` check a plan in the running simulator. `set_startup_map` writes the map CARLA opens at start (`DefaultEngine.ini`, backup kept).
+
+### `actors/spawn_plan.py` (save side)
+`read_plan`, `save_plan` — used by the editor.
 
 ### `geometry/transforms.py`
 | Function | What it does |

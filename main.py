@@ -6,6 +6,9 @@ Command-line entry point.
     python main.py record --config config/experiments/e02_paper_10cavs.yaml --name dense
     python main.py record --set lidar.channels=64 --set scenario.num_cavs=6
     python main.py show   data/runs/<run_folder> --view world
+    python main.py editor --map Town05            # place vehicles by hand (window)
+    python main.py xosc-import scenario.xosc --name qgis_trial   # OpenSCENARIO -> plan + experiment
+    python main.py xosc-export config/spawn_plans/figure2_town03.json figure2.xosc
 
 --config may be given several times (later files win); default.yaml is
 always loaded first. --set overrides any single parameter.
@@ -36,6 +39,20 @@ def build_parser():
     show.add_argument("run_dir")
     show.add_argument("--frame", type=int, default=None)
     show.add_argument("--view", default=ViewMode.BOTH.value, choices=[v.value for v in ViewMode])
+    editor = sub.add_parser("editor", parents=[common], help="place vehicles by hand on any map (window)")
+    editor.add_argument("--map", default=None, help="map to open, e.g. Town05 (default: last used)")
+    editor.add_argument("--plan", default=None, help="spawn plan to open (.json)")
+    xin = sub.add_parser("xosc-import", parents=[common],
+                         help="OpenSCENARIO file -> spawn plan + experiment YAML")
+    xin.add_argument("xosc")
+    xin.add_argument("--name", required=True, help="name of the plan / experiment files")
+    xin.add_argument("--extra-traffic", type=int, default=0, help="random vehicles added to the planned ones")
+    xin.add_argument("--parked", action="store_true", help="vehicles do not drive")
+    xin.add_argument("--frames", type=int, default=10)
+    xout = sub.add_parser("xosc-export", parents=[common], help="spawn plan -> OpenSCENARIO file")
+    xout.add_argument("plan")
+    xout.add_argument("xosc")
+    xout.add_argument("--duration", type=float, default=60.0, help="seconds before the scenario stops")
     return parser
 
 
@@ -56,6 +73,15 @@ def main(argv=None):
         elif args.command == "record":
             run_dir = api.record_lidar(cfg, args.name)
             print("[SUCCESS] Run saved in {}".format(run_dir))
+        elif args.command == "editor":
+            api.open_editor(cfg, args.map, args.plan)
+        elif args.command == "xosc-import":
+            _, yaml_path, _ = api.import_openscenario(cfg, args.xosc, args.name, args.extra_traffic,
+                                                      not args.parked, args.frames)
+            print("[SUCCESS] Record it with: python main.py record --config {} --name {}".format(
+                yaml_path.replace("\\", "/"), args.name))
+        elif args.command == "xosc-export":
+            print("[SUCCESS] Saved {}".format(api.export_openscenario(cfg, args.plan, args.xosc, args.duration)))
         return 0
     except CavLidarError as exc:
         logging.error("%s: %s", type(exc).__name__, exc)

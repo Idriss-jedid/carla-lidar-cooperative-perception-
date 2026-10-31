@@ -31,6 +31,7 @@ class ServerConfig:
     timeout: float = 60.0
     town: str = "Town03"
     allow_map_change: bool = False
+    carla_root: Optional[str] = None
 
 
 @dataclass
@@ -49,6 +50,7 @@ class ScenarioConfig:
     spawn_center: Optional[List[float]] = None
     spawn_radius: float = 80.0
     spawn_bbox: Optional[List[float]] = None
+    spawn_plan: Optional[str] = None
     autopilot: bool = True
     speed_difference_range: List[float] = field(default_factory=lambda: [-20.0, 20.0])
     ignore_lights_range: List[float] = field(default_factory=lambda: [0.0, 0.0])

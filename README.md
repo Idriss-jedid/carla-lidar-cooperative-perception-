@@ -30,6 +30,8 @@ python main.py check                                                    # connec
 python main.py drive --seconds 40                                       # watch vehicles drive
 python main.py record --config config/experiments/scenario/e01_baseline_4cavs.yaml --name e01
 python main.py show data/runs/<run_folder> --view world                 # plots, no CARLA needed
+python main.py editor --map Town05                                      # place vehicles by hand, any map
+python main.py xosc-import scene.xosc --name qgis_trial                 # OpenSCENARIO (QGIS editor) -> experiment
 ```
 
 Change any parameter without editing a file:
@@ -49,31 +51,46 @@ run_dir = record_lidar(cfg, name="short_range")
 show_frame(run_dir, view="world")
 ```
 
+## Scenario editor
+
+A window to place CAVs and traffic by hand on any CARLA map (roads drawn from OpenDRIVE, or an aerial photo taken from CARLA), check the plan in the simulator and record it. See [docs/EDITOR.md](docs/EDITOR.md).
+
+![Scenario editor](docs/images/editor_town03_aerial.png)
+
+Scenarios can also come from CARLA's QGIS Traffic Generation Editor or go to ScenarioRunner as OpenSCENARIO files: see [docs/OPENSCENARIO.md](docs/OPENSCENARIO.md).
+
 ## Project layout
 
 ```
 carla-lidar-cooperative-perception/
-├── main.py                      command line: check | drive | record | show
+├── main.py                      command line: check | drive | record | show | editor | xosc-import | xosc-export
 ├── config/
 │   ├── default.yaml             every parameter with its default value
 │   └── experiments/             ready-made cases, grouped by what they change
-│       ├── scenario/            e01 baseline, e02 paper 10 CAVs, e08 chaotic traffic
+│       ├── scenario/            e01 baseline, e02 paper 10 CAVs, e08 chaotic, e11/e12 Figure 2
 │       ├── lidar/               e03 64 ch, e04 50 m, e05 ideal, e06 noisy, e07 low mount
 │       └── recording/           e09 partial-sweep demo, e10 PLY export
+│   └── spawn_plans/             fixed start poses (figure2_town03.json = the paper's Figure 2)
 ├── cavlidar/                    the library
-│   ├── api.py                   FRONT: 5 simple functions
+│   ├── api.py                   FRONT: 6 simple functions
+│   ├── editor/                  FRONT: scenario editor window (Tkinter)
 │   ├── core/                    config, enums, constants, errors (no CARLA)
 │   └── backend/                 implementation
 │       ├── simulator/           connection, sync mode, camera, SimulationSession
 │       ├── actors/              vehicles, LiDAR, ground truth
 │       ├── recording/           recording loop, storage on disk
+│       ├── maps/                OpenDRIVE maps, lane snapping, road images, aerial photos
+│       ├── interop/             OpenSCENARIO (.xosc) read / write
 │       ├── geometry/            poses and transforms
 │       └── visualization/       BEV plots
+├── tools/                       one-off scripts (make_figure2_plan.py)
 ├── tests/                       unit tests (no CARLA needed)
 └── docs/
     ├── ARCHITECTURE.md          every module and function explained
     ├── PARAMETERS.md            every parameter: meaning, effect, examples
     ├── EXPERIMENTS.md           the 10 experiments + ideas for new ones
+    ├── EDITOR.md                the scenario editor
+    ├── OPENSCENARIO.md          .xosc import / export (QGIS editor, ScenarioRunner)
     └── PAPER_FIDELITY.md        what matches the paper, what differs, what is unknown
 ```
 
