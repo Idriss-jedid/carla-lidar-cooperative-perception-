@@ -156,6 +156,13 @@ Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`fra
 ### `interop/openscenario.py` (no CARLA needed)
 `read_xosc(path)` → map, vehicles (role, model, CARLA pose or lane position, speed), warnings. `write_xosc(path, town, vehicles)` → OpenSCENARIO 1.0 in the QGIS editor's layout. `to_carla` / `from_carla`: OpenDRIVE ↔ CARLA frame, same rule as ScenarioRunner.
 
+### `processing/` (offline, no CARLA needed)
+| Module | What it does |
+|---|---|
+| `ground.py` | `patchwise_ground_mask(points)`: per-patch RANSAC ground planes, accepted only if they continue the ground from the sensor outwards (seed plane from `estimate_seed_plane`, height/tilt continuity with neighbour patches, no returns below). Uses only the points. See [PROCESSING.md](PROCESSING.md). |
+| `bev_grid.py` | `bev_from_points(points)`: occupancy, return count and mean intensity per BEV cell, sensor frame. |
+| `__main__.py` | `python -m cavlidar.backend.processing <run>`: processes one recorded frame into `<run>/processed/<frame>/`. |
+
 ### `simulator/live.py`, `simulator/startup_map.py`
 `draw_plan` / `test_spawn` check a plan in the running simulator. `set_startup_map` writes the map CARLA opens at start (`DefaultEngine.ini`, backup kept).
 

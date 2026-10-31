@@ -1,5 +1,5 @@
 # recorded data (large) - keep it out of git
-data/
+/data/
 
 # Python
 __pycache__/

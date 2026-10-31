@@ -59,6 +59,16 @@ A window to place CAVs and traffic by hand on any CARLA map (roads drawn from Op
 
 Scenarios can also come from CARLA's QGIS Traffic Generation Editor or go to ScenarioRunner as OpenSCENARIO files: see [docs/OPENSCENARIO.md](docs/OPENSCENARIO.md).
 
+## LiDAR processing (offline)
+
+Ground removal and per-CAV BEV grids on recorded frames, without CARLA:
+
+```
+python -m cavlidar.backend.processing data/runs/<run>
+```
+
+See [docs/PROCESSING.md](docs/PROCESSING.md) (method, settings, validation against ground truth).
+
 ## Project layout
 
 ```
@@ -81,9 +91,10 @@ carla-lidar-cooperative-perception/
 │       ├── recording/           recording loop, storage on disk
 │       ├── maps/                OpenDRIVE maps, lane snapping, road images, aerial photos
 │       ├── interop/             OpenSCENARIO (.xosc) read / write
+│       ├── processing/          offline LiDAR processing: ground removal, BEV grids
 │       ├── geometry/            poses and transforms
 │       └── visualization/       BEV plots
-├── tools/                       one-off scripts (make_figure2_plan.py)
+├── tools/                       one-off scripts (make_figure2_plan.py, eval_ground.py)
 ├── tests/                       unit tests (no CARLA needed)
 └── docs/
     ├── ARCHITECTURE.md          every module and function explained
@@ -91,6 +102,7 @@ carla-lidar-cooperative-perception/
     ├── EXPERIMENTS.md           the 10 experiments + ideas for new ones
     ├── EDITOR.md                the scenario editor
     ├── OPENSCENARIO.md          .xosc import / export (QGIS editor, ScenarioRunner)
+    ├── PROCESSING.md            ground removal + BEV, and how they were validated
     └── PAPER_FIDELITY.md        what matches the paper, what differs, what is unknown
 ```
 

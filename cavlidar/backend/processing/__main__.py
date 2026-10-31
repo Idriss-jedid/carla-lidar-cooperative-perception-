@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from .bev_grid import bev_from_points
-from .ground import patchwise_ground_mask
+from .ground import estimate_seed_plane, patchwise_ground_mask
 
 
 def _preview(path, raw, nonground, bev, name):
@@ -39,7 +39,8 @@ def _preview(path, raw, nonground, bev, name):
 
 
 def process_frame(run_dir, frame=None, patch_size=8.0, threshold=0.18,
-                  iterations=70, resolution=0.5, view_range=60.0, preview=True):
+                  iterations=70, resolution=0.5, view_range=60.0, preview=True,
+                  max_step=0.5, max_slope=15.0):
     """Process one stored multi-CAV frame without connecting to CARLA.
 
     Original data/runs/.../frames/ is NEVER modified. The output goes to
@@ -68,9 +69,11 @@ def process_frame(run_dir, frame=None, patch_size=8.0, threshold=0.18,
         if not source.is_file():
             raise FileNotFoundError("Missing .npy scan for {}: {}".format(name, source))
         raw = np.load(str(source), allow_pickle=False)
+        seed_plane = estimate_seed_plane(raw, threshold, max_slope_deg=max_slope)
         mask = patchwise_ground_mask(raw, patch_size=patch_size,
                                      residual_threshold=threshold,
-                                     iterations=iterations)
+                                     iterations=iterations, max_slope_deg=max_slope,
+                                     max_step=max_step, seed_plane=seed_plane)
         non_ground = raw[~mask]
         bev = bev_from_points(non_ground, resolution=resolution, xy_bounds=bounds)
         np.save(str(out_dir / "{}_ground.npy".format(name)), raw[mask])
@@ -84,19 +87,23 @@ def process_frame(run_dir, frame=None, patch_size=8.0, threshold=0.18,
                          "ground_points": int(mask.sum()),
                          "non_ground_points": int(len(non_ground)),
                          "occupied_bev_cells": int(bev.occupancy.sum()),
+                         "estimated_sensor_height_m": (round(float(-seed_plane[2]), 3)
+                                                       if seed_plane is not None else None),
                          "bev_shape": list(bev.occupancy.shape)}
         print("{}: raw={}, ground={}, non-ground={}, occupied BEV cells={}".format(
             name, len(raw), mask.sum(), len(non_ground), bev.occupancy.sum()))
     summary = {
         "frame": frame,
-        "method": "patchwise_local_RANSAC_PROTOTYPE_not_full_paper_patchwork",
+        "method": "patchwise_local_RANSAC_with_slope_aware_height_prior_PROTOTYPE_not_full_paper_patchwork",
         "important_limitations": [
             "No drivable-road pre-filter (required by paper methodology).",
             "Unobserved BEV cells are unknown, not proven free.",
-            "RANSAC parameters are initial engineering choices, not verified paper hyperparameters."
+            "RANSAC parameters are initial engineering choices, not verified paper hyperparameters.",
+            "Sparse patches without accepted neighbours are kept (not removed), e.g. distant slope rings."
         ],
         "settings": {"patch_size_m": patch_size, "ransac_threshold_m": threshold,
-                     "ransac_iterations": iterations, "bev_resolution_m": resolution,
+                     "ransac_iterations": iterations, "max_step_m": max_step,
+                     "max_slope_deg": max_slope, "bev_resolution_m": resolution,
                      "bev_half_range_m": view_range},
         "cavs": results,
     }
@@ -112,6 +119,9 @@ def main(argv=None):
     parser.add_argument("--patch-size", type=float, default=8.0)
     parser.add_argument("--threshold", type=float, default=0.18)
     parser.add_argument("--iterations", type=int, default=70)
+    parser.add_argument("--max-step", type=float, default=0.5,
+                        help="largest ground height step between neighbouring patches (m)")
+    parser.add_argument("--max-slope", type=float, default=15.0, help="steepest ground plane (degrees)")
     parser.add_argument("--resolution", type=float, default=0.5)
     parser.add_argument("--range", type=float, default=60.0)
     parser.add_argument("--no-preview", action="store_true")
@@ -119,7 +129,8 @@ def main(argv=None):
     out_dir = process_frame(args.run_dir, frame=args.frame,
                             patch_size=args.patch_size, threshold=args.threshold,
                             iterations=args.iterations, resolution=args.resolution,
-                            view_range=args.range, preview=not args.no_preview)
+                            view_range=args.range, preview=not args.no_preview,
+                            max_step=args.max_step, max_slope=args.max_slope)
     print("[SUCCESS] Saved processed data to {}".format(out_dir))
 
 

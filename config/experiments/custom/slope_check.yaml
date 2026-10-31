@@ -1,0 +1,16 @@
+# CAVs on and around the sloped +x leg of junction 1221 (ground-removal validation)
+server:
+  town: Town03
+scenario:
+  num_cavs: 4
+  num_traffic: 3
+  spawn_center: [40.0, -135.5]
+  spawn_bbox: [-100.0, 100.0, -200.0, 200.0]
+  spawn_plan: config/spawn_plans/slope_check.json
+  autopilot: false
+recording:
+  warmup_ticks: 20
+  num_frames: 15
+  save_every: 10
+  camera: top
+  camera_height: 70.0
