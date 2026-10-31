@@ -7,12 +7,29 @@ python -m cavlidar.backend.processing data/runs/<run>                 # last fra
 python -m cavlidar.backend.processing data/runs/<run> --frame 1936662
 ```
 
-Output in `data/runs/<run>/processed/<frame>/`, per CAV: `cavN_ground.npy`, `cavN_nonground.npy` (N × 4 points,
-sensor frame), `cavN_bev_occupancy.npy` / `_intensity.npy` / `_count.npy` (BEV grids) and `cavN_preview.png`;
-`summary.json` holds the counts, the settings and the sensor height estimated from the data.
+Pipeline per CAV, as in the paper (Sec. III-A): **drivable-road filter → ground removal → BEV → static
+sectorization → sector metadata**.
 
-**Status: prototype.** The paper first keeps the drivable-road region, then removes the ground with Patchwork RANSAC.
-The road filter is not implemented yet, and the settings below are our engineering choices, not the paper's.
+Output in `data/runs/<run>/processed/<frame>/`, per CAV: `cavN_offroad.npy`, `cavN_ground.npy`, `cavN_nonground.npy`
+(N × 4 points, sensor frame), `cavN_bev_occupancy.npy` / `_intensity.npy` / `_count.npy` (BEV grids),
+`cavN_bev_sector.npy` (sector of each BEV cell) and `cavN_preview.png`; `summary.json` (counts, settings, sensor
+height estimated from the data) and `metadata.json` (the sector metadata, the only data sent to the central node).
+
+**Status: prototype.** The settings below are our engineering choices where the paper gives none; each such choice is
+listed.
+
+## Drivable-road filter (`processing/road_filter.py`)
+
+Paper: "an additional filtering step is introduced to isolate the drivable road region ... removes points outside the
+road surface, such as off-road structures and irrelevant background elements". The paper does not say how; here the
+region comes from the map's OpenDRIVE lanes (an HD map, as in OpenCDA / OpenCOOD), placed with the CAV pose:
+
+- 2D outline of the Driving, Parking and Bidirectional lanes, grown by `--road-margin` (0.5 m, curb), rasterised at
+  0.25 m and cached in `data/maps/` (Town03: built in 1.8 s, loaded in 0.05 s);
+- a point is kept when its world (x, y) is inside the outline, at any height: no road elevation is used, vehicles stay
+  whole. 7–35 ms per CAV.
+
+`--no-road-filter` switches it off.
 
 ## Ground removal (`processing/ground.py`)
 
@@ -25,7 +42,7 @@ are handled. A RANSAC plane is accepted as the ground only if the LiDAR data agr
 | **Continuity**: patches are processed from the sensor outwards; a plane must meet each accepted neighbour's plane along their shared side, at both ends, within `max_step` = 0.5 m (the majority of neighbours must agree) | the ground can bend with a slope, but cannot jump onto a car roof 1.45 m higher, nor tilt up a car's side |
 | **Lowest surface**: a plane with more than 3 % of the patch's returns 0.45 m or more below it is rejected | a plane on a roof has the road around the car under it |
 | **Grade** ≤ 15° (`max_slope`) | Town03's sloped leg is at most 12.4° |
-| **Sparse or rejected patches** (< 18 returns, or no acceptable plane): only points within 0.18 m of the ground predicted by accepted neighbour patches are ground; with no accepted neighbour, every point is kept | conservative: unknown is kept, never removed |
+| **Sparse or rejected patches** (< 18 returns, or no acceptable plane): only points within 0.18 m of the ground predicted by accepted neighbour patches are ground; with no accepted neighbour, every point is kept. A sparse patch with ≥ 3 points on the prediction passes it on to the next patch outwards | conservative: unknown is kept, never removed; a roof never confirms the prediction, so it never passes it on |
 
 Nothing but the points is used: no map, no road height, no vehicle boxes.
 
@@ -75,12 +92,35 @@ kept, 0.0 % vehicle loss.
 
 ![Close pair before / after](images/ground_close_pair.png)
 
-**Known limit.** The slope seen from far away (60–120 m, sparse rings) is partly kept: 14.6 % (qgis_e2e) and 15.9 %
-(routes_demo) of about 3 k points each. Those patches have no accepted neighbour, so they are kept on purpose.
+### Whole cleaning step: road filter + ground removal
 
-`slope_check` (`config/experiments/custom/slope_check.yaml`) was recorded for this validation. Its parked vehicles
-rolled down the slope (parked vehicles are not braked yet: a known bug, not fixed in this change); the scans are still
-valid for ground removal: CAVs on and below the slope, vehicles stopped on it.
+Same scoring, both methods behind the road filter (`--road-filter`), six runs incl. `slope_check_parked`
+(260 scans). "Removed" = off-road or ground.
+
+| | First prototype | Height prior (current) |
+|---|---|---|
+| vehicle points removed | 11.27 % | **0.20 %** |
+| … of them by the road filter | 0.00 % | **0.00 %** |
+| ground points left | 1.95 % | **0.77 %** |
+| slope ground left | 1.46 % | **0.25 %** |
+| vehicles on the slope removed | 12.36 % | **0.04 %** |
+| points left for BEV / sectors | 7.4 % (1 979 per scan) | 7.3 % (1 949 per scan) |
+
+The road filter removes 42 % of the returns (buildings, sidewalks, poles, vegetation) and no vehicle point.
+
+Time per CAV, median of 16 scans (machine busy with another job): road filter 10 ms, ground removal 431 ms, BEV
+6 ms, sectors + metadata 20 ms, total 472 ms (max 770 ms).
+
+**Known limit.** The slope seen from far away is partly kept: 15 % of the slope ground in qgis_e2e and routes_demo,
+i.e. 16–43 points per scan, 93–119 m from cav0. Nothing is observed between them and the sensor (occlusion), so no
+accepted patch can pass the ground on; labelling them would mean guessing a ground height 100 m away (on a slope a
+wrong guess removes vehicle points), so they are kept on purpose. Passing the ground on through sparse patches did
+not change this (15.0 % / 15.3 %) but lowered the ground kept overall (1.7 → 1.5 %, 1.8 → 1.6 %).
+
+`slope_check` (`config/experiments/custom/slope_check.yaml`) was recorded for this validation. In that recording the
+parked vehicles rolled down the slope (parked vehicles were not braked); the scans are still valid for ground
+removal. Parked vehicles now get the brake and hand brake at spawn: `slope_check_parked` is the same scenario
+recorded after the fix (parked vehicles moved ≤ 0.03 m in 15 frames).
 
 ## BEV grids (`processing/bev_grid.py`)
 
@@ -88,8 +128,36 @@ valid for ground removal: CAVs on and below the slope, vehicles stopped on it.
 mean intensity per cell, sensor frame, row 0 = +x (forward), columns increase with +y (right). Occupancy 0 means
 "no return", not "free".
 
+## Static sectorization and sector metadata (`processing/sectors.py`)
+
+Paper: "the perception space around the ego-CAV is divided into a predefined number of sectors with fixed angular
+boundaries. The starting angle and the number of sectors are specified in advance (e.g., 4 sectors starting at π/4),
+and the BEV grid is partitioned accordingly."
+
+- `--sectors 4 --sector-start 45`: sector k covers azimuths [start + k·w, start + (k+1)·w), w = 360°/count, measured in
+  the sensor frame from forward (+x) towards the right (+y). With the defaults: s0 right, s1 rear, s2 left, s3 front.
+- Every point and every BEV cell (`cavN_bev_sector.npy`) gets its sector.
+
+Metadata of sector s of CAV i (`metadata.json`), as used by the paper's ILP
+`max Σ x·S̃·U  s.t.  Σ x·σ ≤ B` (B in MB):
+
+| Field | Paper | Here |
+|---|---|---|
+| size σ_{i,s} (`size_bytes`, `size_mb`) | "the volume covered by the sector", the cost compared with the data budget B (MB) | data volume of the sector's **raw** points (the paper transmits "the corresponding 3D LiDAR points ... from the original point cloud"): points × 16 bytes |
+| quality S̃_{i,s} (`quality`) | non-ground points of the sector, downsampled by "averaging points that are within a specified radius and are too close to each other"; S̃ = downsampled / all points of the sector | non-ground = after road filter + ground removal; downsampling = average of the points in each `--downsample` voxel (0.2 m, radius not given by the paper) |
+| footprint A_{i,s} (`start_rad`, `end_rad`, `range_m`, `footprint`) | start and end angles + sensing range, put in a common frame with the CAV pose for the sector IoU | sensor-frame angles, world-frame angles (+ yaw), apex, and the world-frame wedge polygon; range = the run's `lidar.range` (120 m, paper Table 1); `farthest_return_m` is stored too |
+
+Observation on e12 (4 sectors): each sector holds about 6.5 k points (0.10–0.11 MB), S̃ from 0 (empty) to 0.04. A car
+right behind cav2 gives 2 750 non-ground points but 217 after the 0.2 m averaging, so S̃ measures the obstacle surface
+seen rather than its point count, as the paper's definition implies.
+
+Not yet: dynamic sectorization (sectors formed around obstacle clusters), the sector IoU / complementarity U_{i,s,j},
+the ILP and the greedy–swap heuristic.
+
 ## Tests
 
-`tests/test_processing.py` (no CARLA): synthetic slope with a car on it, sparse patches, the seed height, BEV grids,
-and a real close-pair scan (`tests/data/close_pair_cav1.npz`, routes_demo cav1 cropped to 20 m, labels from CARLA's
+`tests/test_processing.py` (no CARLA needed; the Town03 road test runs when CARLA's OpenDRIVE files are present):
+synthetic slope with a car on it, sparse patches, the seed height, BEV grids, the road filter (pose handling, Town03
+junction 1221), static sectors (360° partition, orientation, BEV cells, downsampling, σ / S̃ / footprint), and a real
+close-pair scan (`tests/data/close_pair_cav1.npz`, routes_demo cav1 cropped to 20 m, labels from CARLA's
 boxes used only for scoring): before the prior 32 % of the neighbour's points were removed, now 0 %.

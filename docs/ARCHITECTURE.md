@@ -160,8 +160,10 @@ Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`fra
 | Module | What it does |
 |---|---|
 | `ground.py` | `patchwise_ground_mask(points)`: per-patch RANSAC ground planes, accepted only if they continue the ground from the sensor outwards (seed plane from `estimate_seed_plane`, height/tilt continuity with neighbour patches, no returns below). Uses only the points. See [PROCESSING.md](PROCESSING.md). |
+| `road_filter.py` | `DrivableArea` (2D raster of the map's Driving / Parking / Bidirectional lanes, cached), `road_mask(points, pose, area)`: the paper's drivable-road pre-filter. |
 | `bev_grid.py` | `bev_from_points(points)`: occupancy, return count and mean intensity per BEV cell, sensor frame. |
-| `__main__.py` | `python -m cavlidar.backend.processing <run>`: processes one recorded frame into `<run>/processed/<frame>/`. |
+| `sectors.py` | `static_sectors(count, start)`, `sector_index`, `bev_sector_grid`, `voxel_downsample`, `sector_metadata` (size σ, quality S̃, footprint A per sector), `footprint_polygon`. |
+| `__main__.py` | `python -m cavlidar.backend.processing <run>`: road filter → ground removal → BEV → sectors → metadata for one recorded frame, into `<run>/processed/<frame>/`. |
 
 ### `simulator/live.py`, `simulator/startup_map.py`
 `draw_plan` / `test_spawn` check a plan in the running simulator. `set_startup_map` writes the map CARLA opens at start (`DefaultEngine.ini`, backup kept).

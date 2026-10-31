@@ -28,6 +28,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from cavlidar.backend.geometry.transforms import pose_to_matrix, sensor_to_world  # noqa: E402
+from cavlidar.backend.processing.road_filter import road_mask  # noqa: E402
 
 GROUND_TOL = 0.3       # m between a point and the road / sidewalk height
 ROAD_REACH = 7         # m (cells) from a lane centre that still counts as road / sidewalk
@@ -94,13 +95,18 @@ def load_ground_fn(path=None):
     return module.patchwise_ground_mask
 
 
-def evaluate(run_dir, ground_fn, raster, frames=None):
-    """Counts per run; `frames` = how many of the last frames (None = all)."""
+def evaluate(run_dir, ground_fn, raster, frames=None, area=None):
+    """
+    Counts per run; `frames` = how many of the last frames (None = all). With a
+    DrivableArea, points off the road are removed first and the ground mask runs
+    on the rest: "removed" = off-road or ground.
+    """
     metas = sorted(glob.glob(os.path.join(run_dir, "frames", "*", "meta.json")))
     if frames:
         metas = metas[-frames:]
     c = {"vehicle": 0, "vehicle_lost": 0, "ground": 0, "ground_kept": 0, "slope_ground": 0,
-         "slope_ground_kept": 0, "slope_vehicle": 0, "slope_vehicle_lost": 0, "seconds": [], "pairs": {}}
+         "slope_ground_kept": 0, "slope_vehicle": 0, "slope_vehicle_lost": 0, "seconds": [], "pairs": {},
+         "points": 0, "kept_points": 0, "offroad": 0, "vehicle_offroad": 0}
     for meta_path in metas:
         with open(meta_path, encoding="utf-8") as fh:
             meta = json.load(fh)
@@ -108,8 +114,17 @@ def evaluate(run_dir, ground_fn, raster, frames=None):
         for cav, info in sorted(meta["cavs"].items()):
             points = np.load(os.path.join(folder, cav + ".npy"))
             start = time.perf_counter()
-            ground = ground_fn(points)
+            if area is None:
+                offroad = np.zeros(len(points), bool)
+                ground = ground_fn(points)
+            else:
+                offroad = ~road_mask(points, info["sensor_pose"], area)
+                ground = offroad.copy()
+                ground[~offroad] = ground_fn(points[~offroad])
             c["seconds"].append(time.perf_counter() - start)
+            c["points"] += len(points)
+            c["kept_points"] += int((~ground).sum())
+            c["offroad"] += int(offroad.sum())
             world = sensor_to_world(points[:, :3], info["sensor_pose"])
             near_vehicle = np.zeros(len(points), bool)
             body = np.zeros(len(points), bool)
@@ -128,6 +143,7 @@ def evaluate(run_dir, ground_fn, raster, frames=None):
             on_slope = ((world[:, 0] >= SLOPE[0]) & (world[:, 0] <= SLOPE[1]) & (world[:, 1] >= SLOPE[2])
                         & (world[:, 1] <= SLOPE[3]) & (world[:, 2] > 0.5))
             c["vehicle"] += int(body.sum())
+            c["vehicle_offroad"] += int((body & offroad).sum())
             c["vehicle_lost"] += int((body & ground).sum())
             c["ground"] += int(is_ground.sum())
             c["ground_kept"] += int((is_ground & ~ground).sum())
@@ -150,6 +166,8 @@ def main(argv=None):
     parser.add_argument("--baseline", help="an older ground.py to compare with")
     parser.add_argument("--town", default="Town03")
     parser.add_argument("--json", help="write all counts to this file")
+    parser.add_argument("--road-filter", action="store_true",
+                        help="remove the points off the drivable road first (both methods)")
     args = parser.parse_args(argv)
 
     from cavlidar.api import DEFAULT_CONFIG
@@ -159,6 +177,12 @@ def main(argv=None):
     if road_map is None:
         raise SystemExit("No OpenDRIVE file for " + args.town)
     raster = HeightRaster(road_map)
+    area = None
+    if args.road_filter:
+        from cavlidar.backend.maps import catalog
+        from cavlidar.backend.processing.road_filter import load_drivable_area
+        info = catalog.find_map(settings.available_maps(load_config(DEFAULT_CONFIG)), args.town)
+        area = load_drivable_area(info.name, info.xodr_path, settings.MAPS_CACHE)
 
     methods = [("new", load_ground_fn())]
     if args.baseline:
@@ -166,7 +190,7 @@ def main(argv=None):
     results = {}
     for run in args.runs:
         for label, fn in methods:
-            c = evaluate(run, fn, raster, args.frames)
+            c = evaluate(run, fn, raster, args.frames, area)
             results.setdefault(os.path.basename(run), {})[label] = c
             print("{:<40} {:<6} scans {:3d} | vehicle loss {:5.1f}% of {:6d} | ground kept {:5.1f}% of {:7d} | "
                   "slope ground kept {:5.1f}% of {:5d} | slope vehicle loss {:5.1f}% of {:4d} | {:.0f} ms/CAV".format(
@@ -175,6 +199,9 @@ def main(argv=None):
                       pct(c["slope_ground_kept"], c["slope_ground"]), c["slope_ground"],
                       pct(c["slope_vehicle_lost"], c["slope_vehicle"]), c["slope_vehicle"],
                       1000 * float(np.mean(c["seconds"]))))
+            print("{:>48} points kept {:5.1f}% ({:.0f} per scan), off-road {:5.1f}%, vehicle points off-road {:4.1f}%".format(
+                "", pct(c["kept_points"], c["points"]), c["kept_points"] / max(1, c["scans"]),
+                pct(c["offroad"], c["points"]), pct(c["vehicle_offroad"], c["vehicle"])))
             for key, (n, lost) in sorted(c["pairs"].items(), key=lambda kv: -kv[1][0])[:4]:
                 print("{:>48} {:<22} {:5.1f}% of {:5d}".format("pair", key, pct(lost, n), n))
     if args.json:

@@ -15,7 +15,8 @@ the ground should look like there:
 
 Patches with too few returns, or without an acceptable plane, are labelled
 conservatively: only points within `residual_threshold` of the ground predicted
-by their accepted neighbours become ground; everything else is kept.
+by their accepted neighbours become ground; everything else is kept. When such a
+patch confirms the prediction, it passes it on to the next patch outwards.
 
 This is NOT yet the paper's full method: the paper also filters to the
 drivable-road region first. Everything works in the individual LiDAR sensor
@@ -32,6 +33,7 @@ SEED_MAX_POINTS = 5000     # ring returns used for the seed (random subset, for 
 SEED_TOL_GROWTH = 0.06     # extra metres of tolerance per metre from the sensor, seed reference only
 BELOW_MARGIN = 0.45        # a return this far below a plane means the plane is not the ground
 MAX_BELOW_FRACTION = 0.03  # ... unless such returns are this rare (fraction of the patch)
+CONFIRMING_POINTS = 3      # returns on the predicted ground that let a sparse patch pass the ground on
 
 
 def _ransac(design, z, candidates, rng, iterations, max_grade):
@@ -187,7 +189,10 @@ def patchwise_ground_mask(points, patch_size=8.0, residual_threshold=0.18, itera
         final = np.abs(patch[:, 2] - design @ best) <= residual_threshold
         mask[finite_idx[ix[final]]] = True
 
-    # Sparse / rejected patches: only points on the ground predicted by accepted neighbours
+    # Sparse / rejected patches, from the sensor outwards: only points on the ground predicted by
+    # accepted neighbours become ground. A patch whose points confirm that prediction becomes a
+    # neighbour for the next ones, so the ground carries on through sparse (distant) areas; a patch
+    # with no confirming point (obstacle, occlusion) passes nothing on.
     for key in rejected:
         near = [planes[(key[0] + dx, key[1] + dy)] for dx in (-1, 0, 1) for dy in (-1, 0, 1)
                 if (dx or dy) and (key[0] + dx, key[1] + dy) in planes]
@@ -196,7 +201,9 @@ def patchwise_ground_mask(points, patch_size=8.0, residual_threshold=0.18, itera
         ix = members[key]
         patch = pts[ix]
         design = np.column_stack((patch[:, 0], patch[:, 1], np.ones(len(patch))))
-        predicted = (design @ np.array(near).T).mean(axis=1)
-        final = np.abs(patch[:, 2] - predicted) <= residual_threshold
+        predicted_plane = np.mean(near, axis=0)  # mean of the neighbours' planes = their mean prediction
+        final = np.abs(patch[:, 2] - design @ predicted_plane) <= residual_threshold
         mask[finite_idx[ix[final]]] = True
+        if final.sum() >= CONFIRMING_POINTS:
+            planes[key] = predicted_plane
     return mask

@@ -61,7 +61,7 @@ Scenarios can also come from CARLA's QGIS Traffic Generation Editor or go to Sce
 
 ## LiDAR processing (offline)
 
-Ground removal and per-CAV BEV grids on recorded frames, without CARLA:
+Drivable-road filter, ground removal, per-CAV BEV grids, static sectors and sector metadata on recorded frames, without CARLA:
 
 ```
 python -m cavlidar.backend.processing data/runs/<run>
@@ -91,7 +91,7 @@ carla-lidar-cooperative-perception/
 │       ├── recording/           recording loop, storage on disk
 │       ├── maps/                OpenDRIVE maps, lane snapping, road images, aerial photos
 │       ├── interop/             OpenSCENARIO (.xosc) read / write
-│       ├── processing/          offline LiDAR processing: ground removal, BEV grids
+│       ├── processing/          offline LiDAR processing: road filter, ground removal, BEV, sectors
 │       ├── geometry/            poses and transforms
 │       └── visualization/       BEV plots
 ├── tools/                       one-off scripts (make_figure2_plan.py, eval_ground.py)
@@ -102,7 +102,7 @@ carla-lidar-cooperative-perception/
     ├── EXPERIMENTS.md           the 10 experiments + ideas for new ones
     ├── EDITOR.md                the scenario editor
     ├── OPENSCENARIO.md          .xosc import / export (QGIS editor, ScenarioRunner)
-    ├── PROCESSING.md            ground removal + BEV, and how they were validated
+    ├── PROCESSING.md            road filter, ground removal, BEV, sectors + metadata, validation
     └── PAPER_FIDELITY.md        what matches the paper, what differs, what is unknown
 ```
 

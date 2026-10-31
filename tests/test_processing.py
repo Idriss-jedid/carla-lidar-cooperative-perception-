@@ -1,5 +1,6 @@
 """Offline unit tests for processing Milestone 01 (no CARLA needed)."""
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -159,18 +160,115 @@ class TestProcessFrame(unittest.TestCase):
             frame.mkdir(parents=True)
             np.save(str(frame / "cav0.npy"), pts)
             with open(str(frame / "meta.json"), "w") as fh:
-                json.dump({"frame": 42, "cavs": {"cav0": {}}}, fh)
-            output = process_frame(d, preview=False)
+                json.dump({"frame": 42, "cavs": {"cav0": {"sensor_pose": {
+                    "x": 0.0, "y": 0.0, "z": 2.4, "roll": 0.0, "pitch": 0.0, "yaw": 0.0}}}}, fh)
+            output = process_frame(d, preview=False, road_filter=False)  # synthetic run: no map
             self.assertTrue((output / "cav0_bev_occupancy.npy").is_file())
             self.assertEqual(np.load(str(output / "cav0_ground.npy")).shape[1], 4)
             self.assertEqual(np.load(str(frame / "cav0.npy")).shape, pts.shape)
             with open(str(output / "summary.json")) as fh:
                 result = json.load(fh)
             self.assertEqual(result["frame"], 42)
+            with open(str(output / "metadata.json")) as fh:
+                sectors = json.load(fh)["cavs"]["cav0"]["sectors"]
+            self.assertEqual(len(sectors), 4)
+            self.assertEqual(sum(s["points"] for s in sectors), len(pts))
             self.assertEqual(result["cavs"]["cav0"]["raw_points"], len(pts))
             self.assertEqual(result["cavs"]["cav0"]["raw_points"],
                              result["cavs"]["cav0"]["ground_points"] +
                              result["cavs"]["cav0"]["non_ground_points"])
+
+
+class TestStaticSectors(unittest.TestCase):
+    """Paper: 'the starting angle and the number of sectors are specified in advance (e.g., 4 sectors starting at pi/4)'."""
+
+    def setUp(self):
+        import math
+        from cavlidar.backend.processing import sectors
+        self.math, self.sec = math, sectors
+        self.four = sectors.static_sectors(4, math.pi / 4)
+
+    def test_partition_covers_360_degrees(self):
+        self.assertAlmostEqual(self.four[0][0], self.math.pi / 4)
+        self.assertAlmostEqual(self.four[-1][1] - self.four[0][0], 2 * self.math.pi)
+        rng = np.random.RandomState(0)
+        x, y = rng.uniform(-50, 50, 5000), rng.uniform(-50, 50, 5000)
+        k = self.sec.sector_index(x, y, self.four)
+        self.assertEqual(set(k.tolist()), {0, 1, 2, 3})
+        self.assertTrue(np.all(np.bincount(k) > 1000))
+
+    def test_orientation(self):
+        # from forward (+x) towards the right (+y): s0 right, s1 rear, s2 left, s3 front
+        k = self.sec.sector_index(np.array([0.0, -10.0, 0.0, 10.0]), np.array([10.0, 0.0, -10.0, 0.0]), self.four)
+        self.assertEqual(k.tolist(), [0, 1, 2, 3])
+        self.assertEqual(self.sec.sector_index(np.array([10.0]), np.array([10.0]), self.four)[0], 0)  # on a boundary
+
+    def test_bev_grid_matches_points(self):
+        from cavlidar.backend.processing import bev_from_points
+        pts = np.array([[20.0, 1.0, 0, 1], [1.0, 20.0, 0, 1], [-20.0, 1.0, 0, 1], [1.0, -20.0, 0, 1]])
+        bev = bev_from_points(pts, resolution=1.0, xy_bounds=(-30, 30, -30, 30))
+        grid = self.sec.bev_sector_grid(bev.occupancy.shape, (-30, 30, -30, 30), self.four)
+        rows, cols = np.nonzero(bev.occupancy)
+        expected = self.sec.sector_index(pts[:, 0], pts[:, 1], self.four)
+        order = np.lexsort((cols, rows))
+        got = sorted(grid[rows[order], cols[order]].tolist())
+        self.assertEqual(got, sorted(expected.tolist()))
+
+    def test_downsample_averages_close_points(self):
+        pts = np.array([[0.01, 0.01, 0.0, 1.0], [0.05, 0.02, 0.0, 3.0], [5.0, 5.0, 0.0, 1.0]])
+        out = self.sec.voxel_downsample(pts, 0.2)
+        self.assertEqual(len(out), 2)
+        self.assertIn(2.0, out[:, 3].round(6).tolist())   # intensities averaged
+
+    def test_metadata(self):
+        rng = np.random.RandomState(1)
+        raw = np.column_stack((rng.uniform(-40, 40, 4000), rng.uniform(-40, 40, 4000),
+                               np.full(4000, -2.4), np.ones(4000)))
+        car = np.column_stack((rng.uniform(9, 13, 300), rng.uniform(-1, 1, 300),
+                               rng.uniform(-2, -1, 300), np.ones(300)))     # in front: sector 3
+        raw = np.vstack((raw, car))
+        pose = {"x": 100.0, "y": -50.0, "z": 2.4, "roll": 0.0, "pitch": 0.0, "yaw": 90.0}
+        meta = self.sec.sector_metadata(raw, car, self.four, pose, lidar_range=120.0, downsample=0.2)
+        self.assertEqual(sum(m["points"] for m in meta), len(raw))
+        self.assertEqual(meta[3]["size_bytes"], meta[3]["points"] * 16)               # sigma: raw data volume
+        self.assertGreater(meta[3]["quality"], 0.0)                                   # S~ only where obstacles are
+        self.assertEqual([m["quality"] for m in meta[:3]], [0.0, 0.0, 0.0])
+        self.assertAlmostEqual(meta[3]["quality"], meta[3]["downsampled_points"] / meta[3]["points"])
+        poly = np.array(meta[3]["footprint"])
+        self.assertEqual(poly[0].tolist(), [100.0, -50.0])                            # apex at the sensor
+        # front sector of a CAV with yaw 90 points along world +y: arc 120 m away in +y
+        mid = poly[1 + len(poly[1:]) // 2]
+        self.assertAlmostEqual(mid[0], 100.0, delta=3.0)
+        self.assertAlmostEqual(mid[1], 70.0, delta=1.0)
+
+
+TOWN03_XODR ="D:/CARLA/CARLA_0.9.12/WindowsNoEditor/CarlaUE4/Content/Carla/Maps/OpenDrive/Town03.xodr"
+
+
+class TestRoadFilter(unittest.TestCase):
+
+    def test_contains_and_pose(self):
+        from cavlidar.backend.processing.road_filter import DrivableArea, road_mask
+        mask = np.zeros((40, 40), dtype=bool)
+        mask[:, 18:22] = True                      # a 1 m wide strip along x at y in [-0.5, 0.5)
+        area = DrivableArea(mask, -5.0, -5.0, 0.25)
+        self.assertTrue(area.contains(np.array([0.0, 4.0]), np.array([0.0, 0.2])).all())
+        self.assertFalse(area.contains(np.array([0.0, 50.0]), np.array([2.0, 0.0])).any())
+        pts = np.array([[1.0, 0.0, 5.0, 0.1], [0.0, 1.0, -2.0, 0.1]])   # any height stays
+        pose = {"x": 0.0, "y": 0.0, "z": 0.0, "roll": 0.0, "pitch": 0.0, "yaw": 90.0}
+        # yaw 90: sensor +x points along world +y, sensor +y along world -x
+        self.assertEqual(road_mask(pts, pose, area).tolist(), [False, True])
+
+    @unittest.skipUnless(os.path.isfile(TOWN03_XODR), "CARLA 0.9.12 OpenDRIVE files not found")
+    def test_town03_junction_1221(self):
+        import carla
+        from cavlidar.backend.processing.road_filter import DrivableArea
+        with open(TOWN03_XODR, encoding="utf-8") as fh:
+            area = DrivableArea.from_carla_map(carla.Map("Town03", fh.read()))
+        on_road = [(2.9, -136.5), (5.2, -138.2), (40.0, -134.0), (9.1, -102.8)]   # junction, lanes, slope
+        off_road = [(40.0, -110.0), (-40.0, -170.0)]                                # inside the blocks
+        self.assertTrue(area.contains(*np.array(on_road).T).all())
+        self.assertFalse(area.contains(*np.array(off_road).T).any())
 
 
 if __name__ == "__main__":
