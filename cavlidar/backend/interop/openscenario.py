@@ -138,8 +138,6 @@ def read_xosc(path):
 
     if root.find(".//Maneuver") is not None or root.find(".//Route") is not None:
         warnings.append("Maneuvers / routes are not imported: vehicles drive with the Traffic Manager")
-    if any(v.speed_mps for v in vehicles):
-        warnings.append("Initial speeds are not imported: vehicles start at rest")
     return XoscScenario(town, vehicles, warnings)
 
 

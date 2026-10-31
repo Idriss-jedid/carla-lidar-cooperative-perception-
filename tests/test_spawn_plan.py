@@ -17,9 +17,10 @@ class TestSpawnPlan(unittest.TestCase):
         poses = load_plan(FIGURE2, "Town03", 4, 11, PAPER_BBOX)
         self.assertEqual(len(poses[Role.CAV]), 4)
         self.assertEqual(len(poses[Role.TRAFFIC]), 11)
-        for pose in poses[Role.CAV] + poses[Role.TRAFFIC]:
-            self.assertLess(abs(pose["x"] - 2.9), 60)   # all around junction 1221
-            self.assertLess(abs(pose["y"] + 136.5), 60)
+        for entry in poses[Role.CAV] + poses[Role.TRAFFIC]:
+            self.assertLess(abs(entry.pose["x"] - 2.9), 60)   # all around junction 1221
+            self.assertLess(abs(entry.pose["y"] + 136.5), 60)
+            self.assertIsNone(entry.route)                    # parked / Traffic Manager, no route
 
     def test_plan_smaller_than_config_is_allowed(self):
         poses = load_plan(FIGURE2, "Town03", 10, 40)

@@ -45,7 +45,8 @@ def plan_from_xosc(path, road_map=None):
                 if abs(wrap_degrees(pose["yaw"] - lane.pose["yaw"])) > MAX_HEADING_ERROR:
                     warnings.append("{}: heading {:.0f} deg but its lane goes {:.0f} deg (wrong way?)".format(
                         v.name, pose["yaw"], lane.pose["yaw"]))
-        vehicles.append(PlannedVehicle(v.role, pose, road_id, lane_id, in_junction))
+        speed = round(v.speed_mps * 3.6, 1) if v.speed_mps > 0 else None  # initial speed -> planned speed
+        vehicles.append(PlannedVehicle(v.role, pose, road_id, lane_id, in_junction, speed_kmh=speed))
     # CAVs first, in file order, so Ego_1 becomes cav_0
     vehicles.sort(key=lambda pv: pv.role != Role.CAV)
     plan = ScenarioPlan(scenario.town, vehicles, source="Imported from OpenSCENARIO: {}".format(path))
@@ -53,8 +54,12 @@ def plan_from_xosc(path, road_map=None):
 
 
 def xosc_from_plan(plan, path, cav_model="vehicle.tesla.model3", traffic_model="vehicle.*", duration=60.0):
-    """Write the plan as an .xosc file (QGIS Traffic Generation Editor / ScenarioRunner)."""
+    """
+    Write the plan as an .xosc file (QGIS Traffic Generation Editor / ScenarioRunner).
+    Planned speeds become initial speeds; routes are not written.
+    """
     vehicles = [openscenario.XoscVehicle(plan.name(i), v.role,
-                                         cav_model if v.role == Role.CAV else traffic_model, v.pose)
+                                         cav_model if v.role == Role.CAV else traffic_model, v.pose,
+                                         (v.speed_kmh or 0.0) / 3.6)
                 for i, v in enumerate(plan.vehicles)]
     return openscenario.write_xosc(path, plan.town, vehicles, duration=duration)

@@ -11,16 +11,19 @@ Right: vehicles, placement rules, CARLA tools, export / record.
 Works without CARLA running: maps come from the OpenDRIVE files shipped with
 CARLA. CARLA is only needed to preview, test-spawn, take aerial photos and record.
 """
+import math
 import os
 import queue
 import threading
 import tkinter as tk
+from dataclasses import replace
 from tkinter import filedialog, messagebox, ttk
 
-from ..backend.actors.spawn_plan import PROJECT_ROOT
-from ..backend.maps import catalog, raster
+from ..backend.actors.spawn_plan import DEFAULT_ROUTE_SPEED, MAX_SPEED, PROJECT_ROOT
+from ..backend.maps import catalog, raster, routes
 from ..backend.maps.road_map import RoadMap, wrap_degrees
-from ..core.enums import Role
+from ..core.enums import Role, RouteEnd
+from ..core.errors import RouteError
 from . import export
 from . import settings
 from .map_view import MapView
@@ -32,6 +35,7 @@ PAPER_BBOX = [-100.0, 100.0, -200.0, 200.0]
 COLORS = {Role.CAV: "#3d8bfd", Role.TRAFFIC: "#ff7043"}
 SELECTED = "#ffd54f"
 OK_GHOST, BAD_GHOST = "#7ee787", "#ff6b6b"
+STOP_MARK = "#e53935"
 FONT = ("Segoe UI", 10)
 
 
@@ -73,9 +77,9 @@ def _job_status(worker):
     return town, cached
 
 
-def _job_preview(worker, planned):
+def _job_preview(worker, planned, paths):
     from ..backend.simulator import live
-    live.draw_plan(worker.client().get_world(), planned)
+    live.draw_plan(worker.client().get_world(), planned, paths)
     return len(planned)
 
 
@@ -112,6 +116,8 @@ class EditorApp:
         self.plan_path = None
         self._drag = None
         self._ghost = None
+        self._route_ghost = None   # (x, y, yaw) where a route click would land
+        self._routes = {}          # traced routes: key -> (Route or None, error text)
 
         self.add_role = tk.StringVar(value=Role.CAV.value)
         self.background = tk.StringVar(value="roads")
@@ -119,6 +125,10 @@ class EditorApp:
         self.bbox_vars = [tk.StringVar(value=str(v)) for v in PAPER_BBOX]
         self.allow_junction = tk.BooleanVar(value=True)
         self.snap_distance = tk.DoubleVar(value=6.0)
+        self.route_mode = tk.BooleanVar(value=False)
+        self.speed_on = tk.BooleanVar(value=False)
+        self.speed_var = tk.StringVar(value=str(int(DEFAULT_ROUTE_SPEED)))
+        self.route_end = tk.StringVar(value=RouteEnd.STOP.value)
         self.status = tk.StringVar()
         self.cursor = tk.StringVar()
         self.carla_status = tk.StringVar(value="CARLA: checking...")
@@ -193,14 +203,17 @@ class EditorApp:
         v.bind("<B1-Motion>", self._on_drag)
         v.bind("<ButtonRelease-1>", self._on_release)
         v.bind("<Motion>", self._on_motion)
-        v.bind("<Leave>", lambda e: self._set_ghost(None))
+        v.bind("<Leave>", lambda e: self._clear_ghosts())
         for seq, func in (("<Delete>", self.delete_selected), ("<Control-z>", self.undo),
                           ("<Control-y>", self.redo), ("<Control-s>", self.save_plan),
                           ("<Control-o>", self.ask_open_plan), ("<Control-n>", self.new_plan),
-                          ("<Escape>", lambda: self.select(None)), ("1", lambda: self.add_role.set("cav")),
+                          ("<Escape>", self.escape), ("1", lambda: self.add_role.set("cav")),
                           ("2", lambda: self.add_role.set("traffic")), ("r", self.toggle_role),
-                          ("f", self.fit_vehicles)):
-            root.bind(seq, lambda e, f=func: None if isinstance(e.widget, (tk.Entry, ttk.Entry)) else f())
+                          ("f", self.fit_vehicles), ("t", self.toggle_route_mode),
+                          ("<Return>", lambda: self.set_route_mode(False)),
+                          ("<BackSpace>", self.remove_route_point)):
+            root.bind(seq, lambda e, f=func: None if isinstance(e.widget, (tk.Entry, ttk.Entry, ttk.Spinbox))
+                      else f())
         root.protocol("WM_DELETE_WINDOW", self.quit)
 
     def _build_menu(self):
@@ -239,10 +252,10 @@ class EditorApp:
         self.count_label.pack(anchor="w", pady=(10, 4))
         frame = ttk.Frame(tab)
         frame.pack(fill="both", expand=True)
-        cols = ("name", "x", "y", "yaw", "lane")
+        cols = ("name", "x", "y", "yaw", "lane", "drive")
         self.table = ttk.Treeview(frame, columns=cols, show="headings", selectmode="browse")
-        for col, width in zip(cols, (80, 70, 70, 55, 70)):
-            self.table.heading(col, text=col.upper() if col != "name" else "Vehicle")
+        for col, width in zip(cols, (64, 52, 58, 40, 62, 84)):
+            self.table.heading(col, text={"name": "Vehicle", "drive": "km/h, route"}.get(col, col.upper()))
             self.table.column(col, width=width, anchor="center")
         scroll = ttk.Scrollbar(frame, orient="vertical", command=self.table.yview)
         self.table.configure(yscrollcommand=scroll.set)
@@ -256,11 +269,47 @@ class EditorApp:
         ttk.Button(buttons, text="Delete  [Del]", command=self.delete_selected).pack(side="left", expand=True,
                                                                                   fill="x", padx=4)
         ttk.Button(buttons, text="Clear all", command=self.clear_all).pack(side="left", expand=True, fill="x")
+        self._build_driving_box(tab)
         ttk.Label(tab, style="Hint.TLabel", wraplength=340, justify="left", text=(
             "Left click: add or select   |   drag: move along the roads\n"
             "Wheel: zoom   |   right drag: pan   |   Ctrl+Z / Ctrl+Y: undo / redo\n"
             "Vehicles always snap to the nearest driving lane and face its direction.")).pack(anchor="w", pady=6)
         return tab
+
+    def _build_driving_box(self, tab):
+        box = ttk.LabelFrame(tab, text="Speed and route of the selected vehicle", padding=8)
+        box.pack(fill="x", pady=(4, 0))
+        row = ttk.Frame(box)
+        row.pack(fill="x")
+        self.chk_speed = ttk.Checkbutton(row, text="Own speed (km/h)", variable=self.speed_on,
+                                         command=self._apply_speed)
+        self.chk_speed.pack(side="left")
+        self.spin_speed = ttk.Spinbox(row, from_=5, to=MAX_SPEED, increment=5, width=6,
+                                      textvariable=self.speed_var, command=self._apply_speed)
+        self.spin_speed.pack(side="left", padx=6)
+        for seq in ("<Return>", "<FocusOut>"):
+            self.spin_speed.bind(seq, lambda e: self._apply_speed())
+        row = ttk.Frame(box)
+        row.pack(fill="x", pady=(6, 0))
+        self.btn_route = ttk.Checkbutton(row, text="Draw route  [T]", variable=self.route_mode,
+                                         style="Toolbutton", command=self._on_route_button)
+        self.btn_route.pack(side="left", expand=True, fill="x")
+        self.btn_route_back = ttk.Button(row, text="Undo point", command=self.remove_route_point)
+        self.btn_route_back.pack(side="left", padx=4)
+        self.btn_route_clear = ttk.Button(row, text="Clear route", command=self.clear_route)
+        self.btn_route_clear.pack(side="left")
+        row = ttk.Frame(box)
+        row.pack(fill="x", pady=(6, 0))
+        ttk.Label(row, text="At the last point:").pack(side="left")
+        self.end_radios = [ttk.Radiobutton(row, text=text, value=end.value, variable=self.route_end,
+                                           command=self._apply_route_end)
+                           for text, end in (("stop", RouteEnd.STOP), ("keep driving", RouteEnd.AUTOPILOT))]
+        for radio in self.end_radios:
+            radio.pack(side="left", padx=4)
+        self.driving_info = ttk.Label(box, wraplength=330, justify="left")
+        self.driving_info.pack(anchor="w", pady=(6, 0))
+        self._driving_widgets = [self.chk_speed, self.spin_speed, self.btn_route, self.btn_route_back,
+                                 self.btn_route_clear] + self.end_radios
 
     def _build_rules_tab(self, parent):
         tab = ttk.Frame(parent, padding=10)
@@ -389,6 +438,7 @@ class EditorApp:
         self.root.update_idletasks()
         try:
             self.road_map = RoadMap.from_file(info.name, info.xodr_path)
+            self._routes = {}
             roads = raster.road_image(self.road_map, info.xodr_path, MAPS_CACHE)
         finally:
             self.root.config(cursor="")
@@ -464,12 +514,21 @@ class EditorApp:
             view.create_text(x0 + 6, y0 + 6, text="spawn area", anchor="nw", fill="#e2b93b", font=FONT)
         outside = set(self.plan.outside(box))
         for i, v in enumerate(self.plan.vehicles):
+            if v.route:
+                self._draw_route(view, i, v)
+        for i, v in enumerate(self.plan.vehicles):
             self._draw_vehicle(view, v.pose, COLORS[v.role], self.plan.name(i), i == self.selected, i in outside)
         if self._ghost is not None:
             pose, ok = self._ghost
             pts = [view.world_to_screen(x, y) for x, y in footprint(pose)]
             view.create_polygon(*[c for p in pts for c in p], outline=OK_GHOST if ok else BAD_GHOST,
                                 fill="", dash=(4, 3), width=2)
+        if self._route_ghost is not None:  # where a route click lands, and the lane's direction
+            x, y, yaw = self._route_ghost
+            sx, sy = view.world_to_screen(x, y)
+            ex, ey = view.world_to_screen(x + 4 * math.cos(math.radians(yaw)), y + 4 * math.sin(math.radians(yaw)))
+            view.create_oval(sx - 5, sy - 5, sx + 5, sy + 5, outline=OK_GHOST, width=2)
+            view.create_line(sx, sy, ex, ey, fill=OK_GHOST, width=2, arrow="last")
         # scale bar
         metres = next((m for m in (1, 2, 5, 10, 20, 50, 100, 200, 500) if m * view.scale >= 60), 1000)
         h = view.winfo_height()
@@ -492,6 +551,29 @@ class EditorApp:
             view.create_text(cx, cy - 14, text=label, fill="#ff6b6b" if outside else "white",
                              font=("Segoe UI", 9, "bold"))
 
+    def _draw_route(self, view, index, v):
+        """The traced path (or, if it cannot be driven, dashed red lines) and the clicked points."""
+        selected = index == self.selected
+        route, error = self._route_of(v)
+        if route is not None:
+            flat = [c for x, y, _ in route.points for c in view.world_to_screen(x, y)]
+            if len(flat) >= 4:
+                view.create_line(*flat, fill=COLORS[v.role], width=4 if selected else 2, capstyle="round",
+                                 arrow="last" if v.route_end == RouteEnd.AUTOPILOT else None,
+                                 arrowshape=(12, 14, 5))
+        else:
+            pts = [(v.pose["x"], v.pose["y"])] + [tuple(p[:2]) for p in v.route]
+            flat = [c for x, y in pts for c in view.world_to_screen(x, y)]
+            view.create_line(*flat, fill=BAD_GHOST, width=2, dash=(6, 4))
+        for n, p in enumerate(v.route, 1):
+            sx, sy = view.world_to_screen(p[0], p[1])
+            last = n == len(v.route)
+            r = 6 if selected else 4
+            fill = STOP_MARK if last and v.route_end == RouteEnd.STOP else "white"
+            view.create_oval(sx - r, sy - r, sx + r, sy + r, fill=fill, outline=COLORS[v.role], width=2)
+            if selected:
+                view.create_text(sx + 9, sy - 9, text=str(n), fill="white", font=("Segoe UI", 9, "bold"))
+
     def refresh(self):
         """Update the table, counts and map after any change of the plan."""
         self.table.delete(*self.table.get_children())
@@ -500,7 +582,7 @@ class EditorApp:
             self.table.insert("", "end", iid=str(i), values=(
                 self.plan.name(i), "{:.1f}".format(p["x"]), "{:.1f}".format(p["y"]),
                 "{:.0f}".format(wrap_degrees(p["yaw"])),
-                "{}/{}".format(v.road_id, v.lane_id)))
+                "{}/{}".format(v.road_id, v.lane_id), self._drive_text(v)))
         if self.selected is not None and self.selected < len(self.plan.vehicles):
             self.table.selection_set(str(self.selected))
             self.table.see(str(self.selected))
@@ -514,6 +596,7 @@ class EditorApp:
         self.count_label.configure(text=text, foreground="#c62828" if outside else "")
         name = os.path.basename(self.plan_path) if self.plan_path else "unsaved plan"
         self.root.title("CARLA Scenario Editor - {} - {}{}".format(self.plan.town, name, " *" if self.dirty else ""))
+        self._sync_driving_box()
         self.redraw()
 
     # ================================================================== editing
@@ -538,6 +621,9 @@ class EditorApp:
 
     def _on_press(self, event):
         self.view.focus_set()
+        if self.route_mode.get() and self.selected is not None:
+            self._add_route_point(event.x, event.y)
+            return
         x, y = self.view.screen_to_world(event.x, event.y)
         index = self.plan.hit(x, y)
         if index is not None:
@@ -568,7 +654,9 @@ class EditorApp:
         if not self._drag["started"]:
             self.plan.begin_change()
             self._drag["started"] = True
-        self.plan.replace(index, self._vehicle_from(lane, self.plan.vehicles[index].role), record=False)
+        moved = replace(self.plan.vehicles[index], pose=lane.pose, road_id=lane.road_id, lane_id=lane.lane_id,
+                        in_junction=lane.in_junction)  # keeps its speed and route
+        self.plan.replace(index, moved, record=False)
         self.dirty = True
         self.status.set("{} -> ({:.1f}, {:.1f})".format(self.plan.name(index), lane.pose["x"], lane.pose["y"]))
         self.redraw()
@@ -584,6 +672,14 @@ class EditorApp:
         if self.road_map:
             text += "   z {:.1f}".format(self.road_map.road_height(x, y))
         self.cursor.set(text + "   |   {:.2f} px/m".format(self.view.scale))
+        if self.route_mode.get() and self.selected is not None:
+            self.view.configure(cursor="crosshair")
+            lane = self.road_map.snap(x, y, float(self.snap_distance.get())) if self.road_map else None
+            ghost = (lane.pose["x"], lane.pose["y"], lane.pose["yaw"]) if lane else None
+            if ghost != self._route_ghost:
+                self._route_ghost = ghost
+                self.redraw()
+            return
         if self.plan.hit(x, y) is not None:
             self.view.configure(cursor="hand2")
             self._set_ghost(None)
@@ -591,6 +687,11 @@ class EditorApp:
         self.view.configure(cursor="crosshair")
         lane, problem = self._snap(event.x, event.y)
         self._set_ghost((lane.pose, not problem) if lane else None)
+
+    def _clear_ghosts(self):
+        self._route_ghost = None
+        self._set_ghost(None)
+        self.redraw()
 
     def _set_ghost(self, ghost):
         if ghost != self._ghost:
@@ -605,6 +706,7 @@ class EditorApp:
             if index is not None:
                 p = self.plan.vehicles[index].pose
                 self.view.centre_on(p["x"], p["y"])
+            self._sync_driving_box()
             self.redraw()
 
     def select(self, index):
@@ -614,6 +716,7 @@ class EditorApp:
         else:
             self.table.selection_set(str(index))
             self.table.see(str(index))
+        self._sync_driving_box()
         self.redraw()
 
     def toggle_role(self):
@@ -652,6 +755,162 @@ class EditorApp:
             self.dirty = True
             self.selected = None
             self.refresh()
+
+    # ================================================================== speed and route
+    def _route_of(self, v):
+        """(Route, '') or (None, why it cannot be driven) for a vehicle with a route; cached."""
+        key = (round(v.pose["x"], 2), round(v.pose["y"], 2), round(v.pose["yaw"], 1),
+               tuple(tuple(p) for p in v.route))
+        if key not in self._routes:
+            try:
+                self._routes[key] = (routes.trace_route(self.road_map.map, v.pose, v.route), "")
+            except RouteError as exc:
+                self._routes[key] = (None, str(exc))
+        return self._routes[key]
+
+    def _route_problems(self):
+        return ["{}: {}".format(self.plan.name(i), self._route_of(v)[1])
+                for i, v in enumerate(self.plan.vehicles) if v.route and self._route_of(v)[0] is None]
+
+    def _drive_text(self, v):
+        if v.route:
+            route, _ = self._route_of(v)
+            length = "{:.0f} m".format(route.length) if route else "error"
+            return "{:.0f}, {}".format(v.speed_kmh or DEFAULT_ROUTE_SPEED, length)
+        return "{:.0f}".format(v.speed_kmh) if v.speed_kmh else ""
+
+    def _sync_driving_box(self):
+        """Show the selected vehicle's speed and route in the box (or disable it)."""
+        index = self.selected
+        if index is None or index >= len(self.plan.vehicles):
+            for widget in self._driving_widgets:
+                widget.state(["disabled"])
+            self.set_route_mode(False)
+            self.driving_info.configure(text="Select a vehicle to give it a speed or a route.", foreground="")
+            return
+        v = self.plan.vehicles[index]
+        for widget in self._driving_widgets:
+            widget.state(["!disabled"])
+        self.speed_on.set(bool(v.speed_kmh or v.route))
+        self.speed_var.set("{:g}".format(v.speed_kmh or DEFAULT_ROUTE_SPEED))
+        self.route_end.set(v.route_end.value)
+        if v.route:
+            self.chk_speed.state(["disabled"])  # a route always has a speed
+        else:
+            for widget in [self.btn_route_back, self.btn_route_clear] + self.end_radios:
+                widget.state(["disabled"])
+        if not self.speed_on.get():
+            self.spin_speed.state(["disabled"])
+        problem = bool(v.route) and self._route_of(v)[0] is None
+        self.driving_info.configure(text=self._driving_text(v), foreground="#c62828" if problem else "")
+
+    def _driving_text(self, v):
+        name = self.plan.name(self.selected)
+        if v.route:
+            route, error = self._route_of(v)
+            if route is None:
+                return "Route problem: {}".format(error)
+            speed = v.speed_kmh or DEFAULT_ROUTE_SPEED
+            profile = routes.speed_profile(route, speed / 3.6, v.route_end == RouteEnd.STOP)
+            ds = route.distances[1:] - route.distances[:-1]
+            seconds = float(sum(d / max(0.5, (a + b) / 2) for d, a, b in zip(ds, profile[:-1], profile[1:])))
+            end = "then stops" if v.route_end == RouteEnd.STOP else "then the Traffic Manager drives on"
+            return ("{}: {} point(s), {:.0f} m, about {:.0f} s without stops. Drives at {:g} km/h (slower in "
+                    "turns, waits at red lights and behind vehicles), {}. It starts when the recording "
+                    "starts.").format(name, len(v.route), route.length, seconds, speed, end)
+        if v.speed_kmh:
+            return ("{}: no route. The Traffic Manager drives it at about {:g} km/h, choosing its own way."
+                    ).format(name, v.speed_kmh)
+        return ("{}: no route, no own speed. It drives with the Traffic Manager if autopilot is on "
+                "(Export tab), else it stays parked. Press T to draw a route.").format(name)
+
+    def _apply_speed(self):
+        index = self.selected
+        if index is None:
+            return
+        v = self.plan.vehicles[index]
+        speed = None
+        if self.speed_on.get() or v.route:
+            try:
+                speed = round(min(MAX_SPEED, max(1.0, float(self.speed_var.get()))), 1)
+            except ValueError:
+                self.root.bell()
+                self.status.set("Speed must be a number (km/h)")
+                return
+        if speed != v.speed_kmh:
+            self.plan.set_driving(index, speed_kmh=speed)
+            self.dirty = True
+        self.refresh()
+
+    def _apply_route_end(self):
+        index = self.selected
+        if index is None:
+            return
+        end = RouteEnd.parse(self.route_end.get())
+        if end != self.plan.vehicles[index].route_end:
+            self.plan.set_driving(index, route_end=end)
+            self.dirty = True
+            self.refresh()
+
+    def set_route_mode(self, on):
+        on = bool(on) and self.selected is not None and self.road_map is not None
+        self.route_mode.set(on)
+        if not on and self._route_ghost is not None:
+            self._route_ghost = None
+            self.redraw()
+        if on:
+            self.status.set("Route of {}: click points on the roads in driving order. Enter or Esc ends.".format(
+                self.plan.name(self.selected)))
+
+    def toggle_route_mode(self):
+        self.set_route_mode(not self.route_mode.get())
+
+    def _on_route_button(self):
+        self.set_route_mode(self.route_mode.get())
+
+    def escape(self):
+        if self.route_mode.get():
+            self.set_route_mode(False)
+        else:
+            self.select(None)
+
+    def _add_route_point(self, sx, sy):
+        index = self.selected
+        v = self.plan.vehicles[index]
+        x, y = self.view.screen_to_world(sx, sy)
+        lane = self.road_map.snap(x, y, float(self.snap_distance.get()))
+        if lane is None:
+            self.status.set("No driving lane here")
+            self.root.bell()
+            return
+        route = [list(p) for p in v.route] + [[lane.pose["x"], lane.pose["y"]]]
+        traced, error = self._route_of(replace(v, route=route))
+        if traced is None:
+            self.status.set(error)
+            self.root.bell()
+            return
+        self.plan.set_driving(index, route=route, speed_kmh=v.speed_kmh or DEFAULT_ROUTE_SPEED)
+        self.dirty = True
+        self.status.set("{}: point {} added, route {:.0f} m".format(self.plan.name(index), len(route), traced.length))
+        self.refresh()
+
+    def remove_route_point(self):
+        index = self.selected
+        if index is None or not self.plan.vehicles[index].route:
+            return
+        self.plan.set_driving(index, route=self.plan.vehicles[index].route[:-1])
+        self.dirty = True
+        self.refresh()
+
+    def clear_route(self):
+        index = self.selected
+        if index is None or not self.plan.vehicles[index].route:
+            return
+        self.plan.set_driving(index, route=[])
+        self.dirty = True
+        self.set_route_mode(False)
+        self.status.set("Route of {} removed (Ctrl+Z to undo)".format(self.plan.name(index)))
+        self.refresh()
 
     # ================================================================== files
     def _confirm_discard(self):
@@ -748,7 +1007,9 @@ class EditorApp:
                                             initialfile="{}_scenario.xosc".format(self.plan.town.lower()))
         if path:
             xosc_from_plan(self.plan, path, self.cfg.scenario.cav_blueprint, self.cfg.scenario.traffic_blueprint)
-            self.status.set("Exported {} (CAVs as Ego_1..., traffic as Vehicle_1...)".format(path))
+            note = " Routes are not written (speeds are, as initial speeds)." if any(
+                v.route for v in self.plan.vehicles) else ""
+            self.status.set("Exported {} (CAVs as Ego_1..., traffic as Vehicle_1...).{}".format(path, note))
 
     def quit(self):
         if self._confirm_discard():
@@ -761,6 +1022,9 @@ class EditorApp:
                 name=self.exp_name.get(), extra_traffic=int(self.extra_traffic.get()),
                 autopilot=self.exp_autopilot.get(), num_frames=int(self.exp_frames.get()),
                 save_every=int(self.exp_every.get()), spawn_bbox=self.bbox())
+            problems = self._route_problems()
+            if problems:
+                raise ValueError("These routes cannot be driven:\n" + "\n".join(problems))
             outside = self.plan.outside(options.spawn_bbox)
             if outside:
                 raise ValueError("{} vehicles are outside the spawn area. Move them or turn the area off "
@@ -819,7 +1083,9 @@ class EditorApp:
         self.carla_info.configure(text=text)
 
     def preview(self):
-        self.worker.submit("preview", _job_preview, self.plan.planned())
+        paths = [(v.role, route.points.tolist()) for v in self.plan.vehicles if v.route
+                 for route in [self._route_of(v)[0]] if route is not None]
+        self.worker.submit("preview", _job_preview, self.plan.planned(), paths)
         self.status.set("Drawing the plan in the CARLA window...")
 
     def test_spawn(self):
@@ -868,8 +1134,13 @@ class EditorApp:
             if ok:
                 self.server_town, cached = result
                 self.carla_status.set("CARLA: running {}".format(self.server_town))
-                if catalog.find_map(self.maps, cached.name) is None:  # no CARLA folder: use the server's map
+                info = catalog.find_map(self.maps, cached.name)
+                if info is None or not info.installed:  # no CARLA folder: use the server's map
                     self._find_maps()
+                    # the map the server is running is installed, whatever the cache says
+                    self.maps = [replace(m, installed=True) if m.name == cached.name else m for m in self.maps]
+                    self.map_box["values"] = [m.label for m in self.maps]
+                    self._show_map_in_box()
                     if self.road_map is None:
                         self.open_map(cached.name)
             else:
@@ -904,6 +1175,8 @@ class EditorApp:
             "Left click on a road: add a vehicle (role chosen in the Vehicles tab, keys 1 / 2)\n"
             "Left click on a vehicle: select it; drag it to move it along the roads\n"
             "R: switch the selected vehicle between CAV and traffic\n"
+            "T: draw a route for the selected vehicle (click points on the roads, Enter / Esc ends,\n"
+            "    Backspace removes the last point)\n"
             "Delete: remove the selected vehicle\n"
             "Mouse wheel: zoom   |   right or middle drag: pan   |   F: fit vehicles\n"
             "Ctrl+Z / Ctrl+Y: undo / redo   |   Ctrl+S: save   |   Ctrl+O: open\n\n"

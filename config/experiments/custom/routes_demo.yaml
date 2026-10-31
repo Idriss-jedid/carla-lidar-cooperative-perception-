@@ -1,0 +1,22 @@
+# Made with the scenario editor (python main.py editor)
+server:
+  town: Town03
+scenario:
+  num_cavs: 4
+  num_traffic: 17
+  spawn_center:
+  - 3.9
+  - -120.4
+  spawn_bbox:
+  - -100.0
+  - 100.0
+  - -200.0
+  - 200.0
+  spawn_plan: config/spawn_plans/routes_demo.json
+  autopilot: true
+recording:
+  warmup_ticks: 100
+  num_frames: 12
+  save_every: 20
+  camera: top
+  camera_height: 70.0

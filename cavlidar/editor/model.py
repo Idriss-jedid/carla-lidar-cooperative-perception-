@@ -1,9 +1,9 @@
 """
 The scenario being edited, independent of the window and of CARLA.
 
-A ScenarioPlan is an ordered list of vehicles (role + pose). Names follow the
-order within each role: the first CAV is cav_0, the second cav_1, ...
-Every change can be undone.
+A ScenarioPlan is an ordered list of vehicles (role + pose, and optionally a
+speed and a route). Names follow the order within each role: the first CAV is
+cav_0, the second cav_1, ... Every change can be undone.
 """
 import copy
 import math
@@ -11,7 +11,7 @@ from dataclasses import dataclass, field, replace
 from typing import List, Optional
 
 from ..backend.actors import spawn_plan
-from ..core.enums import Role
+from ..core.enums import Role, RouteEnd
 
 VEHICLE_LENGTH = 4.8   # metres, footprint used for the overlap check
 VEHICLE_WIDTH = 2.1
@@ -26,6 +26,9 @@ class PlannedVehicle:
     road_id: int = 0
     lane_id: int = 0
     in_junction: bool = False
+    speed_kmh: Optional[float] = None    # None: Traffic Manager speed (or parked)
+    route: List[list] = field(default_factory=list)  # [[x, y], ...] points to drive through, in order
+    route_end: RouteEnd = RouteEnd.STOP
 
 
 def footprint(pose, length=VEHICLE_LENGTH, width=VEHICLE_WIDTH):
@@ -130,6 +133,11 @@ class ScenarioPlan:
         self._snapshot()
         self.vehicles[index] = replace(self.vehicles[index], role=role)
 
+    def set_driving(self, index, **changes):
+        """Change speed_kmh, route and/or route_end of vehicle `index` (one undo step)."""
+        self._snapshot()
+        self.vehicles[index] = replace(self.vehicles[index], **changes)
+
     def remove(self, index):
         self._snapshot()
         del self.vehicles[index]
@@ -158,8 +166,14 @@ class ScenarioPlan:
         """Plan entries for spawn_plan.save_plan, ordered as the vehicles are numbered."""
         records = []
         for i, v in enumerate(self.vehicles):
-            records.append({"role": v.role.value, "index": int(self.name(i).rsplit("_", 1)[1]),
-                            "pose": dict(v.pose), "road_id": v.road_id, "lane_id": v.lane_id})
+            record = {"role": v.role.value, "index": int(self.name(i).rsplit("_", 1)[1]),
+                      "pose": dict(v.pose), "road_id": v.road_id, "lane_id": v.lane_id}
+            if v.speed_kmh:
+                record["speed_kmh"] = v.speed_kmh
+            if v.route:
+                record["route"] = [list(p) for p in v.route]
+                record["route_end"] = v.route_end.value
+            records.append(record)
         return records
 
     def save(self, path):
@@ -170,5 +184,8 @@ class ScenarioPlan:
         data = spawn_plan.read_plan(path)
         entries = sorted(data.get("vehicles", []), key=lambda e: (Role.parse(e["role"]) != Role.CAV, e["index"]))
         vehicles = [PlannedVehicle(Role.parse(e["role"]), dict(e["pose"]), e.get("road_id", 0),
-                                   e.get("lane_id", 0)) for e in entries]
+                                   e.get("lane_id", 0), speed_kmh=e.get("speed_kmh"),
+                                   route=[list(p) for p in e.get("route") or []],
+                                   route_end=RouteEnd.parse(e.get("route_end", RouteEnd.STOP)))
+                    for e in entries]
         return cls(data["map"], vehicles, data.get("source", ""))

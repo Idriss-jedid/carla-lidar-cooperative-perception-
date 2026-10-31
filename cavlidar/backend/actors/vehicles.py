@@ -114,6 +114,16 @@ def enable_autopilot(vehicles, tm, speed_difference_range, ignore_lights_range, 
         tm.ignore_lights_percentage(vehicle, rng.uniform(*ignore_lights_range))
 
 
+def tm_speed_difference(vehicle, speed_kmh):
+    """
+    Traffic Manager setting that makes `vehicle` drive at speed_kmh on its current
+    road: CARLA 0.9.12 only accepts a percentage below the speed limit (needs one
+    tick after spawning, so the vehicle knows its limit).
+    """
+    limit = vehicle.get_speed_limit() or 30.0
+    return 100.0 * (1.0 - speed_kmh / limit)
+
+
 def destroy(client, actors):
     """Destroy a list of actors (vehicles or sensors) in one batch."""
     actors = [a for a in actors if a is not None]

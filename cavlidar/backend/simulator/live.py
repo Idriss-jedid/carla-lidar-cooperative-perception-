@@ -20,10 +20,11 @@ def _transform(pose, lift=SPAWN_LIFT):
                            carla.Rotation(pitch=pose.get("pitch", 0.0), yaw=pose["yaw"]))
 
 
-def draw_plan(world, planned, seconds=60.0, camera_height=80.0):
+def draw_plan(world, planned, paths=(), seconds=60.0, camera_height=80.0):
     """
-    Draw each planned vehicle (box, heading arrow, name) in the CARLA window
-    for `seconds` and put the spectator above them. `planned` = [(name, role, pose)].
+    Draw each planned vehicle (box, heading arrow, name) and each route path
+    in the CARLA window for `seconds` and put the spectator above them.
+    `planned` = [(name, role, pose)], `paths` = [(role, [[x, y, z], ...])].
     """
     if not planned:
         return
@@ -38,6 +39,12 @@ def draw_plan(world, planned, seconds=60.0, camera_height=80.0):
         world.debug.draw_arrow(t.location, tip, thickness=0.15, arrow_size=0.6, color=color, life_time=seconds)
         world.debug.draw_string(carla.Location(x=t.location.x, y=t.location.y, z=t.location.z + 2.5),
                                 name, draw_shadow=True, color=color, life_time=seconds)
+    for role, points in paths:
+        color = _COLORS.get(role, carla.Color(255, 255, 255))
+        for a, b in zip(points[:-1], points[1:]):
+            world.debug.draw_line(carla.Location(x=a[0], y=a[1], z=a[2] + 0.5),
+                                  carla.Location(x=b[0], y=b[1], z=b[2] + 0.5),
+                                  thickness=0.1, color=color, life_time=seconds)
     xs = [p["x"] for _, _, p in planned]
     ys = [p["y"] for _, _, p in planned]
     z = max(p["z"] for _, _, p in planned)

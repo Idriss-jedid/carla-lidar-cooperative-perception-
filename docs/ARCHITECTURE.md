@@ -115,7 +115,10 @@ Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`fra
 | `destroy(client, actors)` | Removes actors in one batch. |
 
 ### `actors/spawn_plan.py`
-`load_plan(path, town, num_cavs, num_traffic, bbox)` — reads a spawn plan (JSON) and checks it against the config: map, roles, counts, `spawn_bbox`. Returns the poses per role. No CARLA needed. Relative paths are looked up in the current folder, then in the project folder.
+`load_plan(path, town, num_cavs, num_traffic, bbox)` — reads a spawn plan (JSON) and checks it against the config: map, roles, counts, `spawn_bbox`, speeds, routes. Returns a `PlannedSpawn` (pose, speed, route, route end) per vehicle and role. No CARLA needed. Relative paths are looked up in the current folder, then in the project folder.
+
+### `actors/route_driver.py`
+`RouteDriver` drives one vehicle along its traced route, once per tick (called by `SimulationSession.tick()`): pure pursuit steering, speed held with CARLA's constant-velocity mode, lowered by the route's speed profile, the next red light on the route (`route_lights`) and vehicles on the path ahead. Holds the vehicle until `start()`; at the end it stops or hands over to the Traffic Manager.
 
 ### `actors/lidar.py`
 | Item | What it does |
@@ -145,6 +148,7 @@ Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`fra
 | Module | What it does |
 |---|---|
 | `catalog.py` | Lists maps from the CARLA folder: OpenDRIVE file (editable) and level `.umap` (simulable). |
+| `routes.py` | `trace_route(carla_map, start, points)`: A* over the lanes (driving direction, junction branches, allowed lane changes) → `Route` (points every 2 m + their lanes); `speed_profile` (set speed, slower in turns, braking to the end). Same code in the editor and in the simulation. |
 | `road_map.py` | `RoadMap`: `carla.Map` built on the client from OpenDRIVE; `snap(x, y)` → legal lane pose (heading, height, slope); `bounds()`. |
 | `raster.py` | `Georef` (world ↔ pixels) and the road image (lanes, sidewalks, markings, direction arrows), cached in `data/maps/`. |
 | `aerial.py` | Aerial photo of the loaded map: camera 1000 m up, tiles stitched with the same `Georef` as the road image. |

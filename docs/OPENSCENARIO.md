@@ -30,7 +30,7 @@ Only the LiDAR backend of this repository records data; ScenarioRunner is not ne
 | Start pose: `LanePosition`, `RoadPosition` | computed on the map like ScenarioRunner (waypoint of road/lane/s, offset sideways) |
 | Height | taken from the road under the vehicle (files often store z = 0; on Town03's slope that would put the car inside the road) |
 
-Reported as warnings, not imported: pedestrians, bicycles / motorbikes, props (`MiscObject`), catalog references, relative positions, routes and maneuvers (vehicles drive with the Traffic Manager), initial speeds (vehicles start at rest). Vehicles more than 2.5 m from a driving lane, or facing more than 45° away from their lane, are imported and reported.
+Reported as warnings, not imported: pedestrians, bicycles / motorbikes, props (`MiscObject`), catalog references, relative positions, routes and maneuvers (draw routes in the editor instead). Initial speeds (`AbsoluteTargetSpeed` in `Init`) become the vehicle's planned speed, and planned speeds are exported as initial speeds; routes are not exported. Vehicles more than 2.5 m from a driving lane, or facing more than 45° away from their lane, are imported and reported.
 
 ## Coordinate frames
 

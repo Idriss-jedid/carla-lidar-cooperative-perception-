@@ -1,0 +1,18 @@
+# Made with the scenario editor (python main.py editor)
+server:
+  town: Town03
+scenario:
+  num_cavs: 4
+  num_traffic: 20
+  spawn_center:
+  - 3.6
+  - -120.6
+  spawn_bbox: null
+  spawn_plan: config/spawn_plans/qgis_e2e.json
+  autopilot: true
+recording:
+  warmup_ticks: 100
+  num_frames: 10
+  save_every: 20
+  camera: top
+  camera_height: 70.0

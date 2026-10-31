@@ -23,3 +23,7 @@ class SpawnError(CavLidarError):
 
 class SensorTimeout(CavLidarError):
     """A sensor did not deliver its measurement in time."""
+
+
+class RouteError(ConfigError):
+    """A vehicle's route cannot be driven along the lanes (wrong way, unconnected roads)."""

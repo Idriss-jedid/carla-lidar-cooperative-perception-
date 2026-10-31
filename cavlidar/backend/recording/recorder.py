@@ -22,8 +22,9 @@ class RecordSummary:
 
 def record(session, run_dir):
     """
-    Save the initial vehicle poses (spawn.json), run warm-up ticks, then save
-    recording.num_frames frames, one every recording.save_every ticks.
+    Save the initial vehicle poses (spawn.json), run warm-up ticks, start the
+    routed vehicles, then save recording.num_frames frames, one every
+    recording.save_every ticks.
     Returns a RecordSummary and warns if every CAV stood still.
     """
     rec = session.cfg.recording
@@ -33,6 +34,7 @@ def record(session, run_dir):
         frame = session.tick()
         session.read_scans(frame)  # keep sensor queues in step
         session.update_camera()
+    session.start_routes()  # routed vehicles held their planned pose during the warm-up
 
     summary = RecordSummary(run_dir)
     total_points, tick = 0, 0
@@ -55,7 +57,7 @@ def record(session, run_dir):
     if scans:
         summary.mean_points_per_cav = total_points / float(len(summary.frames) * len(scans))
     summary.mean_cav_speed_kmh = {name: sum(v) / len(v) for name, v in speeds.items()}
-    _check_motion(summary.mean_cav_speed_kmh, session.cfg.scenario.autopilot)
+    _check_motion(summary.mean_cav_speed_kmh, session.cfg.scenario.autopilot or bool(session.drivers))
     return summary
 
 

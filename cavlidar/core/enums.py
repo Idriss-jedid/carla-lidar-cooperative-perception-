@@ -54,6 +54,12 @@ class Role(_StrEnum):
         return cls(prefix) if prefix in (m.value for m in cls) else cls.OTHER
 
 
+class RouteEnd(_StrEnum):
+    """What a vehicle does when it reaches the last point of its route."""
+    STOP = "stop"           # brake and stay there
+    AUTOPILOT = "autopilot" # hand over to the Traffic Manager and keep driving
+
+
 class ViewMode(_StrEnum):
     """Which plots `show` produces for a recorded frame."""
     SENSOR = "sensor"   # one panel per CAV, in its own LiDAR frame

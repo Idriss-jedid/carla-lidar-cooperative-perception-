@@ -81,7 +81,7 @@ class TestRead(unittest.TestCase):
         self.assertEqual([(v.name, v.role) for v in s.vehicles],
                          [("Ego_1", Role.CAV), ("Vehicle_1", Role.TRAFFIC), ("Vehicle_3", Role.TRAFFIC)])
         text = " ".join(s.warnings)
-        for expected in ("Vehicle_2 (bicycle)", "Pedestrian_1 (Pedestrian)", "Maneuvers", "Initial speeds"):
+        for expected in ("Vehicle_2 (bicycle)", "Pedestrian_1 (Pedestrian)", "Maneuvers"):
             self.assertIn(expected, text)
 
     def test_opendrive_frame_is_flipped_like_scenario_runner(self):

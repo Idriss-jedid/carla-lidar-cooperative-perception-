@@ -74,6 +74,7 @@ def drive_cars(cfg, seconds=40.0):
     dt = cfg.simulation.fixed_delta_seconds
     with SimulationSession(cfg) as session:
         session.spawn_fleet()
+        session.start_routes()
         for i in range(int(seconds / dt)):
             start = time.perf_counter()
             session.tick()
