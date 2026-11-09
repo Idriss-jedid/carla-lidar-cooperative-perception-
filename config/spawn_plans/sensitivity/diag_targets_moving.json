@@ -1,0 +1,227 @@
+{
+  "map": "Town03",
+  "source": "flat2.json with traffic at 30 km/h: label-timing diagnostic",
+  "vehicles": [
+    {
+      "role": "cav",
+      "index": 0,
+      "pose": {
+        "x": -0.94,
+        "y": -123.06,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 28,
+      "lane_id": 2
+    },
+    {
+      "role": "cav",
+      "index": 1,
+      "pose": {
+        "x": 6.75,
+        "y": -150.92,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 29,
+      "lane_id": -1
+    },
+    {
+      "role": "cav",
+      "index": 2,
+      "pose": {
+        "x": 9.03,
+        "y": -101.81,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 28,
+      "lane_id": -2
+    },
+    {
+      "role": "cav",
+      "index": 3,
+      "pose": {
+        "x": 10.59,
+        "y": -164.83,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 29,
+      "lane_id": -2
+    },
+    {
+      "role": "traffic",
+      "index": 0,
+      "pose": {
+        "x": -35.36,
+        "y": -139.03,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -178.77
+      },
+      "road_id": 19,
+      "lane_id": -1,
+      "speed_kmh": 30.0
+    },
+    {
+      "role": "traffic",
+      "index": 1,
+      "pose": {
+        "x": -2.33,
+        "y": -67.08,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 28,
+      "lane_id": 2,
+      "speed_kmh": 30.0
+    },
+    {
+      "role": "traffic",
+      "index": 2,
+      "pose": {
+        "x": -30.43,
+        "y": -135.42,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 1.23
+      },
+      "road_id": 19,
+      "lane_id": 1,
+      "speed_kmh": 30.0
+    },
+    {
+      "role": "traffic",
+      "index": 3,
+      "pose": {
+        "x": 8.24,
+        "y": -69.82,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 28,
+      "lane_id": -2,
+      "speed_kmh": 30.0
+    },
+    {
+      "role": "traffic",
+      "index": 4,
+      "pose": {
+        "x": -20.15,
+        "y": -198.01,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 1.44
+      },
+      "road_id": 2,
+      "lane_id": 2,
+      "speed_kmh": 30.0
+    },
+    {
+      "role": "traffic",
+      "index": 5,
+      "pose": {
+        "x": 5.19,
+        "y": -87.9,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 28,
+      "lane_id": -1,
+      "speed_kmh": 30.0
+    },
+    {
+      "role": "traffic",
+      "index": 6,
+      "pose": {
+        "x": 7.51,
+        "y": -181.91,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 29,
+      "lane_id": -1,
+      "speed_kmh": 30.0
+    },
+    {
+      "role": "traffic",
+      "index": 7,
+      "pose": {
+        "x": -43.35,
+        "y": -139.2,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -178.77
+      },
+      "road_id": 19,
+      "lane_id": -1,
+      "speed_kmh": 30.0
+    },
+    {
+      "role": "traffic",
+      "index": 8,
+      "pose": {
+        "x": -3.26,
+        "y": -171.18,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 29,
+      "lane_id": 3,
+      "speed_kmh": 30.0
+    },
+    {
+      "role": "traffic",
+      "index": 9,
+      "pose": {
+        "x": -2.94,
+        "y": -184.17,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 29,
+      "lane_id": 3,
+      "speed_kmh": 30.0
+    },
+    {
+      "role": "traffic",
+      "index": 10,
+      "pose": {
+        "x": -4.74,
+        "y": -111.15,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 28,
+      "lane_id": 3,
+      "speed_kmh": 30.0
+    }
+  ]
+}

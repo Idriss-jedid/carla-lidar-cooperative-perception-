@@ -1,0 +1,23 @@
+{
+ "scene": "moving2",
+ "factor": "range",
+ "runs": {
+  "50.0": "2026-11-06_205456_abl_moving2_range_50",
+  "80.0": "2026-11-06_205456_abl_moving2_range_80",
+  "120.0": "2026-11-06_205456_abl_moving2_range_120"
+ },
+ "frames": [
+  192047,
+  192049,
+  192051,
+  192053,
+  192055
+ ],
+ "max_vehicle_position_diff_m": 0.0,
+ "max_sensor_xy_diff_m": 0.0,
+ "vehicles": 24,
+ "moving_vehicles_share": 0.775,
+ "median_speed_moving_mps": 6.736979486861804,
+ "valid_moving": true,
+ "attempts": 1
+}

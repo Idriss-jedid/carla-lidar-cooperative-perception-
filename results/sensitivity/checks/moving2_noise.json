@@ -1,0 +1,24 @@
+{
+ "scene": "moving2",
+ "factor": "noise",
+ "runs": {
+  "0.0": "2026-11-06_205337_abl_moving2_noise_0",
+  "0.02": "2026-11-06_205337_abl_moving2_noise_0.02",
+  "0.05": "2026-11-06_205337_abl_moving2_noise_0.05",
+  "0.1": "2026-11-06_205337_abl_moving2_noise_0.1"
+ },
+ "frames": [
+  191529,
+  191531,
+  191533,
+  191535,
+  191537
+ ],
+ "max_vehicle_position_diff_m": 0.0,
+ "max_sensor_xy_diff_m": 0.0,
+ "vehicles": 24,
+ "moving_vehicles_share": 0.7833333333333333,
+ "median_speed_moving_mps": 6.745699492519957,
+ "valid_moving": true,
+ "attempts": 1
+}

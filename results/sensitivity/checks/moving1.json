@@ -1,0 +1,30 @@
+{
+ "scene": "moving1",
+ "baseline": "2026-11-06_204716_abl_moving1_base",
+ "runs": {
+  "abl_moving1_base": {
+   "run": "2026-11-06_204716_abl_moving1_base",
+   "vehicles": 24,
+   "common_with_baseline": 24,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 3.620787713114412,
+   "problems": []
+  },
+  "abl_moving1_repeat": {
+   "run": "2026-11-06_204733_abl_moving1_repeat",
+   "vehicles": 24,
+   "common_with_baseline": 24,
+   "max_position_diff_m": 3.5645689130386335,
+   "max_rotation_diff_deg": 4.770660400390625,
+   "max_motion_within_run_m": 3.615048624412932,
+   "problems": [
+    "positions differ from the baseline",
+    "repeat differs from the baseline in 20 of 20 scans"
+   ],
+   "identical_scans": 0,
+   "scans": 20
+  }
+ },
+ "ok": false
+}

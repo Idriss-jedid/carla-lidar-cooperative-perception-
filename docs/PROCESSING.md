@@ -7,16 +7,42 @@ python -m cavlidar.backend.processing data/runs/<run>                 # last fra
 python -m cavlidar.backend.processing data/runs/<run> --frame 1936662
 ```
 
-Pipeline per CAV, as in the paper (Sec. III-A): **drivable-road filter → ground removal → BEV → static
-sectorization → sector metadata**.
+Pipeline per CAV, as in the paper (Sec. III-A), after removing the CAV's own body: **ego-body mask →
+drivable-road filter → ground removal → BEV → static sectorization → sector metadata**.
 
-Output in `data/runs/<run>/processed/<frame>/`, per CAV: `cavN_offroad.npy`, `cavN_ground.npy`, `cavN_nonground.npy`
+Output in `data/runs/<run>/processed/<frame>/`, per CAV: `cavN_ego.npy`, `cavN_offroad.npy`, `cavN_ground.npy`, `cavN_nonground.npy`
 (N × 4 points, sensor frame), `cavN_bev_occupancy.npy` / `_intensity.npy` / `_count.npy` (BEV grids),
 `cavN_bev_sector.npy` (sector of each BEV cell) and `cavN_preview.png`; `summary.json` (counts, settings, sensor
 height estimated from the data) and `metadata.json` (the sector metadata, the only data sent to the central node).
 
 **Status: prototype.** The settings below are our engineering choices where the paper gives none; each such choice is
 listed.
+
+## Ego-body mask (`processing/ego_mask.py`)
+
+Below about 2 m the LiDAR sees its own car: in the sensitivity analysis ([SENSITIVITY.md](SENSITIVITY.md)) 9 244
+returns per scan (35 % of the scan) hit the CAV's roof and hood at a 1.6 m mount, 917 at 1.9 m, none at 2.4 m. These
+are not obstacles; they are removed first, before the road filter and the ground removal.
+
+- **Inputs**: the sensor-to-vehicle calibration (the run's `lidar.mount_x/y/z`, and a mount rotation if one is
+  configured) and the static body box of the CAV model (`EGO_MODELS`, measured once from CARLA's `bounding_box`:
+  Tesla Model 3 half extents 2.396 × 1.082 × 0.744 m, centre 0.029 / 0 / 0.736 m). No pose, no per-frame annotation,
+  no other vehicle. The sensor is rigidly attached, so the box is fixed in the sensor frame and the vehicle's pitch on
+  a slope does not change the mask.
+- **Rule**: a return inside the body box grown by `--ego-margin` (0.1 m) is removed. On by default for every sensor
+  configuration (A, B, C); `--no-ego-mask` switches it off.
+- **Invalid mount**: if the sensor origin lies inside the body box, the mount is physically impossible;
+  `summary.json` reports `mount_valid: false` (and the roof clearance) and a warning is printed. Masking cannot make
+  such a recording valid. The Model 3 roof is at 1.48 m: 1.6 m is valid (0.12 m clearance), 1.2 m is not.
+- **Sector payload σ is unchanged**: σ stays the sector's full original scan (what a selected sector would send); the ego points are
+  only kept out of the ground removal, the BEV and the quality S̃.
+
+Checked on the 22 sensitivity runs (`tools/eval_ablation.py --ego-mask off|on`, ground truth for scoring only):
+own-body points left in the non-ground cloud 9 244 → 0 (1.6 m) and 917 → 0 (1.9 m); BEV cells holding own points
+26 → 0 and 12 → 0; other vehicles' points removed by the mask: 0 in every run; at 2.4 m and 2.8 m, and for every
+noise, channel and range run, every metric is identical with and without the mask. Unit tests cover an x offset,
+mount heights, a rotated mount, a CAV pitched 12° on a slope, the invalid-mount flag and the real close-pair scan
+(none of the neighbouring car's 4 108 points is masked).
 
 ## Drivable-road filter (`processing/road_filter.py`)
 
@@ -109,7 +135,14 @@ Same scoring, both methods behind the road filter (`--road-filter`), six runs in
 The road filter removes 42 % of the returns (buildings, sidewalks, poles, vegetation) and no vehicle point.
 
 Time per CAV, median of 16 scans (machine busy with another job): road filter 10 ms, ground removal 431 ms, BEV
-6 ms, sectors + metadata 20 ms, total 472 ms (max 770 ms).
+6 ms, sectors + metadata 20 ms, total 472 ms (max 770 ms). **Re-measured 2026-11-07 with CARLA and other jobs closed**
+(e12, all 40 scans, same code): ego mask + road filter + ground removal + BEV take a median of 99 ms per CAV on the
+first pass (p95 153 ms, max 249 ms), 89 ms as the fastest of 3. The sensitivity benchmark gives 77 ± 5 ms on its flat
+scenes ([SENSITIVITY.md](SENSITIVITY.md#processing-time)). The 472 ms above reflected the busy machine.
+
+**Not real-time yet.** The LiDAR sweeps at 20 Hz (50 ms per scan); this processing takes about 0.1 s per CAV, on one
+CPU core, in Python. No end-to-end real-time claim can be made: the processing would have to become at least twice as
+fast, before any sharing step is added after it.
 
 **Known limit.** The slope seen from far away is partly kept: 15 % of the slope ground in qgis_e2e and routes_demo,
 i.e. 16–43 points per scan, 93–119 m from cav0. Nothing is observed between them and the sensor (occlusion), so no
@@ -138,7 +171,7 @@ and the BEV grid is partitioned accordingly."
   the sensor frame from forward (+x) towards the right (+y). With the defaults: s0 right, s1 rear, s2 left, s3 front.
 - Every point and every BEV cell (`cavN_bev_sector.npy`) gets its sector.
 
-Metadata of sector s of CAV i (`metadata.json`), as used by the paper's ILP
+Metadata of sector s of CAV i (`metadata.json`), the input of the paper's ILP
 `max Σ x·S̃·U  s.t.  Σ x·σ ≤ B` (B in MB):
 
 | Field | Paper | Here |
@@ -151,8 +184,8 @@ Observation on e12 (4 sectors): each sector holds about 6.5 k points (0.10–0.1
 right behind cav2 gives 2 750 non-ground points but 217 after the 0.2 m averaging, so S̃ measures the obstacle surface
 seen rather than its point count, as the paper's definition implies.
 
-Not yet: dynamic sectorization (sectors formed around obstacle clusters), the sector IoU / complementarity U_{i,s,j},
-the ILP and the greedy–swap heuristic.
+The sector IoU, complementarity, ILP and Greedy–Swap that use this metadata are not part of this repository.
+Not yet: dynamic sectorization (sectors formed around obstacle clusters).
 
 ## Tests
 

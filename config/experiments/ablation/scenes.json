@@ -1,0 +1,205 @@
+{
+  "flat": {
+    "config": "config/experiments/ablation/scene_flat.yaml",
+    "terrain": "flat",
+    "kind": "sensor",
+    "seed": 7,
+    "source": "the paper's Figure 2 (tools/make_figure2_plan.py)"
+  },
+  "slope": {
+    "config": "config/experiments/ablation/scene_slope.yaml",
+    "terrain": "slope",
+    "kind": "sensor",
+    "seed": 7,
+    "source": "slope_check.json without routes"
+  },
+  "flat2": {
+    "config": "config/experiments/ablation/scene_flat2.yaml",
+    "terrain": "flat",
+    "kind": "sensor",
+    "seed": 2101
+  },
+  "slope2": {
+    "config": "config/experiments/ablation/scene_slope2.yaml",
+    "terrain": "slope",
+    "kind": "sensor",
+    "seed": 2201
+  },
+  "flat3": {
+    "config": "config/experiments/ablation/scene_flat3.yaml",
+    "terrain": "flat",
+    "kind": "sensor",
+    "seed": 2102
+  },
+  "flat4": {
+    "config": "config/experiments/ablation/scene_flat4.yaml",
+    "terrain": "flat",
+    "kind": "sensor",
+    "seed": 2103
+  },
+  "flat5": {
+    "config": "config/experiments/ablation/scene_flat5.yaml",
+    "terrain": "flat",
+    "kind": "sensor",
+    "seed": 2104
+  },
+  "slope3": {
+    "config": "config/experiments/ablation/scene_slope3.yaml",
+    "terrain": "slope",
+    "kind": "sensor",
+    "seed": 2202
+  },
+  "slope4": {
+    "config": "config/experiments/ablation/scene_slope4.yaml",
+    "terrain": "slope",
+    "kind": "sensor",
+    "seed": 2203
+  },
+  "slope5": {
+    "config": "config/experiments/ablation/scene_slope5.yaml",
+    "terrain": "slope",
+    "kind": "sensor",
+    "seed": 2204
+  },
+  "pop1": {
+    "config": "config/experiments/ablation/scene_pop1.yaml",
+    "terrain": "junction",
+    "kind": "population",
+    "seed": 2301,
+    "variants": {
+      "c4": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop1_c4.json",
+        "num_cavs": 4,
+        "num_traffic": 30
+      },
+      "c6": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop1_c6.json",
+        "num_cavs": 6,
+        "num_traffic": 28
+      },
+      "c8": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop1_c8.json",
+        "num_cavs": 8,
+        "num_traffic": 26
+      },
+      "c10": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop1_c10.json",
+        "num_cavs": 10,
+        "num_traffic": 24
+      },
+      "t20": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop1_t20.json",
+        "num_cavs": 4,
+        "num_traffic": 20
+      },
+      "t30": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop1_t30.json",
+        "num_cavs": 4,
+        "num_traffic": 30
+      },
+      "t40": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop1_t40.json",
+        "num_cavs": 4,
+        "num_traffic": 40
+      }
+    }
+  },
+  "pop2": {
+    "config": "config/experiments/ablation/scene_pop2.yaml",
+    "terrain": "junction",
+    "kind": "population",
+    "seed": 2302,
+    "variants": {
+      "c4": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop2_c4.json",
+        "num_cavs": 4,
+        "num_traffic": 30
+      },
+      "c6": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop2_c6.json",
+        "num_cavs": 6,
+        "num_traffic": 28
+      },
+      "c8": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop2_c8.json",
+        "num_cavs": 8,
+        "num_traffic": 26
+      },
+      "c10": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop2_c10.json",
+        "num_cavs": 10,
+        "num_traffic": 24
+      },
+      "t20": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop2_t20.json",
+        "num_cavs": 4,
+        "num_traffic": 20
+      },
+      "t30": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop2_t30.json",
+        "num_cavs": 4,
+        "num_traffic": 30
+      },
+      "t40": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop2_t40.json",
+        "num_cavs": 4,
+        "num_traffic": 40
+      }
+    }
+  },
+  "pop3": {
+    "config": "config/experiments/ablation/scene_pop3.yaml",
+    "terrain": "junction",
+    "kind": "population",
+    "seed": 2303,
+    "variants": {
+      "c4": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop3_c4.json",
+        "num_cavs": 4,
+        "num_traffic": 30
+      },
+      "c6": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop3_c6.json",
+        "num_cavs": 6,
+        "num_traffic": 28
+      },
+      "c8": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop3_c8.json",
+        "num_cavs": 8,
+        "num_traffic": 26
+      },
+      "c10": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop3_c10.json",
+        "num_cavs": 10,
+        "num_traffic": 24
+      },
+      "t20": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop3_t20.json",
+        "num_cavs": 4,
+        "num_traffic": 20
+      },
+      "t30": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop3_t30.json",
+        "num_cavs": 4,
+        "num_traffic": 30
+      },
+      "t40": {
+        "spawn_plan": "config/spawn_plans/sensitivity/pop3_t40.json",
+        "num_cavs": 4,
+        "num_traffic": 40
+      }
+    }
+  },
+  "moving1": {
+    "config": "config/experiments/ablation/scene_moving1.yaml",
+    "terrain": "moving",
+    "kind": "moving",
+    "seed": 2401
+  },
+  "moving2": {
+    "config": "config/experiments/ablation/scene_moving2.yaml",
+    "terrain": "moving",
+    "kind": "moving",
+    "seed": 2402
+  }
+}

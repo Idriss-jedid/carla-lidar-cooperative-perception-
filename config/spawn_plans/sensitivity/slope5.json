@@ -1,0 +1,146 @@
+{
+  "map": "Town03",
+  "source": "tools/make_sensitivity_scenes.py slope5 --kind slope --seed 2204",
+  "vehicles": [
+    {
+      "role": "cav",
+      "index": 0,
+      "pose": {
+        "x": 68.77,
+        "y": -133.3,
+        "z": 7.84,
+        "roll": 0.0,
+        "pitch": 3.44,
+        "yaw": 1.23
+      },
+      "road_id": 18,
+      "lane_id": 1
+    },
+    {
+      "role": "cav",
+      "index": 1,
+      "pose": {
+        "x": 20.85,
+        "y": -137.83,
+        "z": 0.17,
+        "roll": 0.0,
+        "pitch": -3.04,
+        "yaw": -178.77
+      },
+      "road_id": 18,
+      "lane_id": -1
+    },
+    {
+      "role": "cav",
+      "index": 2,
+      "pose": {
+        "x": 64.84,
+        "y": -136.88,
+        "z": 7.51,
+        "roll": 0.0,
+        "pitch": -6.0,
+        "yaw": -178.77
+      },
+      "road_id": 18,
+      "lane_id": -1
+    },
+    {
+      "role": "cav",
+      "index": 3,
+      "pose": {
+        "x": 31.85,
+        "y": -137.59,
+        "z": 1.25,
+        "roll": 0.0,
+        "pitch": -8.19,
+        "yaw": -178.77
+      },
+      "road_id": 18,
+      "lane_id": -1
+    },
+    {
+      "role": "traffic",
+      "index": 0,
+      "pose": {
+        "x": 55.77,
+        "y": -133.58,
+        "z": 6.11,
+        "roll": 0.0,
+        "pitch": 11.77,
+        "yaw": 1.23
+      },
+      "road_id": 18,
+      "lane_id": 1
+    },
+    {
+      "role": "traffic",
+      "index": 1,
+      "pose": {
+        "x": 28.77,
+        "y": -134.16,
+        "z": 0.86,
+        "roll": 0.0,
+        "pitch": 6.79,
+        "yaw": 1.23
+      },
+      "road_id": 18,
+      "lane_id": 1
+    },
+    {
+      "role": "traffic",
+      "index": 2,
+      "pose": {
+        "x": 51.84,
+        "y": -137.16,
+        "z": 5.25,
+        "roll": 0.0,
+        "pitch": -12.42,
+        "yaw": -178.77
+      },
+      "road_id": 18,
+      "lane_id": -1
+    },
+    {
+      "role": "traffic",
+      "index": 3,
+      "pose": {
+        "x": 45.77,
+        "y": -133.79,
+        "z": 3.95,
+        "roll": 0.0,
+        "pitch": 12.42,
+        "yaw": 1.23
+      },
+      "road_id": 18,
+      "lane_id": 1
+    },
+    {
+      "role": "traffic",
+      "index": 4,
+      "pose": {
+        "x": -1.36,
+        "y": -106.07,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 28,
+      "lane_id": 2
+    },
+    {
+      "role": "traffic",
+      "index": 5,
+      "pose": {
+        "x": 5.56,
+        "y": -102.9,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 28,
+      "lane_id": -1
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+# Sensitivity benchmark, generated scene 'moving1' (moving, seed 2401) by tools/make_sensitivity_scenes.py.
+# Every vehicle starts at the spawn plan's pose and is driven by the Traffic Manager; only the LiDAR
+# changes between runs (the paths must be identical, checked after recording).
+simulation:
+  seed: 2401
+scenario:
+  num_cavs: 4
+  num_traffic: 20
+  spawn_center: [2.9, -136.5]
+  spawn_bbox: [-100, 100, -200, 200]
+  spawn_plan: config/spawn_plans/sensitivity/moving1.json
+  traffic_blueprint: vehicle.*
+  autopilot: true
+recording:
+  warmup_ticks: 120
+  num_frames: 5
+  save_every: 2
+  camera: none

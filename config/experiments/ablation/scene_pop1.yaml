@@ -1,0 +1,18 @@
+# Sensitivity benchmark, generated scene 'pop1' (population, seed 2301) by tools/make_sensitivity_scenes.py.
+# Every vehicle parked and braked at the spawn plan's pose; only the LiDAR (or, for population
+# scenes, the plan variant) changes between runs.
+simulation:
+  seed: 2301
+scenario:
+  num_cavs: 4
+  num_traffic: 30
+  spawn_center: [2.9, -136.5]
+  spawn_bbox: [-100, 100, -200, 200]
+  spawn_plan: config/spawn_plans/sensitivity/pop1_c4.json
+  traffic_blueprint: vehicle.tesla.model3
+  autopilot: false
+recording:
+  warmup_ticks: 40
+  num_frames: 5
+  save_every: 2
+  camera: none

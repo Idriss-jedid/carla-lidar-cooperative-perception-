@@ -1,0 +1,23 @@
+{
+ "scene": "moving1",
+ "factor": "channels",
+ "runs": {
+  "16": "2026-11-06_205228_abl_moving1_channels_16",
+  "32": "2026-11-06_205228_abl_moving1_channels_32",
+  "64": "2026-11-06_205228_abl_moving1_channels_64"
+ },
+ "frames": [
+  191003,
+  191005,
+  191007,
+  191009,
+  191011
+ ],
+ "max_vehicle_position_diff_m": 0.0,
+ "max_sensor_xy_diff_m": 0.0,
+ "vehicles": 24,
+ "moving_vehicles_share": 0.825,
+ "median_speed_moving_mps": 6.8603223461382274,
+ "valid_moving": true,
+ "attempts": 1
+}

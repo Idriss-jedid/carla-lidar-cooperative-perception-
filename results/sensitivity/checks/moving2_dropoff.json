@@ -1,0 +1,25 @@
+{
+ "scene": "moving2",
+ "factor": "dropoff",
+ "runs": {
+  "0.0": "2026-11-06_205720_abl_moving2_dropoff_0",
+  "0.2": "2026-11-06_205720_abl_moving2_dropoff_0.2",
+  "0.3": "2026-11-06_205720_abl_moving2_dropoff_0.3",
+  "0.45": "2026-11-06_205720_abl_moving2_dropoff_0.45",
+  "0.6": "2026-11-06_205720_abl_moving2_dropoff_0.6"
+ },
+ "frames": [
+  197288,
+  197290,
+  197292,
+  197294,
+  197296
+ ],
+ "max_vehicle_position_diff_m": 0.0,
+ "max_sensor_xy_diff_m": 0.0,
+ "vehicles": 24,
+ "moving_vehicles_share": 0.7833333333333333,
+ "median_speed_moving_mps": 6.780077778384383,
+ "valid_moving": true,
+ "attempts": 2
+}

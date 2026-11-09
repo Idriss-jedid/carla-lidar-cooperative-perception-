@@ -1,0 +1,212 @@
+{
+ "case": "slope",
+ "dt": 0.05,
+ "ticks": 50,
+ "config": "config/experiments/ablation/scene_moving2.yaml",
+ "overrides": [],
+ "seed": 2402,
+ "physics": {
+  "substepping": true,
+  "max_substep_delta_time": 0.01,
+  "max_substeps": 10
+ },
+ "lidar": {
+  "channels": 32,
+  "range": 120.0,
+  "points_per_second": 1000000,
+  "rotation_frequency": 20.0,
+  "mount_z": 2.4,
+  "dropoff_general_rate": 0.45,
+  "noise_stddev": 0.0
+ },
+ "speeds": {
+  "obs_top": 0.0,
+  "obs_bottom": 0.0,
+  "obs_below": 0.0,
+  "up_7": 7.0,
+  "up_3": 3.5,
+  "down_7": 7.0,
+  "down_3": 3.5,
+  "parked_up": 0.0,
+  "parked_down": 0.0
+ },
+ "observers": {
+  "obs_top": 141,
+  "obs_bottom": 142,
+  "obs_below": 143
+ },
+ "vehicles": {
+  "141": {
+   "name": "obs_top",
+   "type_id": "vehicle.tesla.model3",
+   "extent": [
+    2.3958897590637207,
+    1.081725001335144,
+    0.744159996509552
+   ],
+   "center_offset": [
+    0.029217304661870003,
+    -2.5925785394065315e-06,
+    0.7355303764343262
+   ],
+   "box_rotation": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "142": {
+   "name": "obs_bottom",
+   "type_id": "vehicle.tesla.model3",
+   "extent": [
+    2.3958897590637207,
+    1.081725001335144,
+    0.744159996509552
+   ],
+   "center_offset": [
+    0.02921881154179573,
+    1.5872716403464437e-06,
+    0.7355303168296814
+   ],
+   "box_rotation": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "143": {
+   "name": "obs_below",
+   "type_id": "vehicle.tesla.model3",
+   "extent": [
+    2.3958897590637207,
+    1.081725001335144,
+    0.744159996509552
+   ],
+   "center_offset": [
+    0.029220065101981163,
+    -8.438527174803312e-07,
+    0.7355305552482605
+   ],
+   "box_rotation": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "144": {
+   "name": "up_7",
+   "type_id": "vehicle.tesla.model3",
+   "extent": [
+    2.3958897590637207,
+    1.081725001335144,
+    0.744159996509552
+   ],
+   "center_offset": [
+    0.02921958453953266,
+    1.9778310615947703e-06,
+    0.7355306148529053
+   ],
+   "box_rotation": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "145": {
+   "name": "up_3",
+   "type_id": "vehicle.tesla.model3",
+   "extent": [
+    2.3958897590637207,
+    1.081725001335144,
+    0.744159996509552
+   ],
+   "center_offset": [
+    0.029218487441539764,
+    -8.969008717940596e-07,
+    0.7355306148529053
+   ],
+   "box_rotation": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "146": {
+   "name": "down_7",
+   "type_id": "vehicle.tesla.model3",
+   "extent": [
+    2.3958897590637207,
+    1.081725001335144,
+    0.744159996509552
+   ],
+   "center_offset": [
+    0.029217729344964027,
+    1.9562244233384263e-06,
+    0.7355303168296814
+   ],
+   "box_rotation": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "147": {
+   "name": "down_3",
+   "type_id": "vehicle.tesla.model3",
+   "extent": [
+    2.3958897590637207,
+    1.081725001335144,
+    0.744159996509552
+   ],
+   "center_offset": [
+    0.029220929369330406,
+    -2.3126601433887117e-07,
+    0.7355309724807739
+   ],
+   "box_rotation": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "148": {
+   "name": "parked_up",
+   "type_id": "vehicle.tesla.model3",
+   "extent": [
+    2.3958897590637207,
+    1.081725001335144,
+    0.744159996509552
+   ],
+   "center_offset": [
+    0.02921903133392334,
+    2.0292400222388096e-06,
+    0.7355307340621948
+   ],
+   "box_rotation": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "149": {
+   "name": "parked_down",
+   "type_id": "vehicle.tesla.model3",
+   "extent": [
+    2.3958897590637207,
+    1.081725001335144,
+    0.744159996509552
+   ],
+   "center_offset": [
+    0.02922036126255989,
+    -3.0419230370171135e-06,
+    0.73553067445755
+   ],
+   "box_rotation": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  }
+ },
+ "server_version": "0.9.12"
+}

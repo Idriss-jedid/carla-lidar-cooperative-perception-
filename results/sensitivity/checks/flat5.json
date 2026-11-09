@@ -1,0 +1,160 @@
+{
+ "scene": "flat5",
+ "baseline": "2026-11-06_202835_abl_flat5_base",
+ "runs": {
+  "abl_flat5_base": {
+   "run": "2026-11-06_202835_abl_flat5_base",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_noise_0.02": {
+   "run": "2026-11-06_202844_abl_flat5_noise_0.02",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_noise_0.05": {
+   "run": "2026-11-06_202852_abl_flat5_noise_0.05",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_noise_0.1": {
+   "run": "2026-11-06_202901_abl_flat5_noise_0.1",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_height_1.6": {
+   "run": "2026-11-06_202911_abl_flat5_height_1.6",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_height_1.9": {
+   "run": "2026-11-06_202921_abl_flat5_height_1.9",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_height_2.8": {
+   "run": "2026-11-06_202929_abl_flat5_height_2.8",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_channels_16": {
+   "run": "2026-11-06_202939_abl_flat5_channels_16",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_channels_64": {
+   "run": "2026-11-06_202947_abl_flat5_channels_64",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_range_50": {
+   "run": "2026-11-06_202957_abl_flat5_range_50",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_range_80": {
+   "run": "2026-11-06_203006_abl_flat5_range_80",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_dropoff_0": {
+   "run": "2026-11-06_203014_abl_flat5_dropoff_0",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_dropoff_0.2": {
+   "run": "2026-11-06_203027_abl_flat5_dropoff_0.2",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_dropoff_0.3": {
+   "run": "2026-11-06_203038_abl_flat5_dropoff_0.3",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_dropoff_0.6": {
+   "run": "2026-11-06_203047_abl_flat5_dropoff_0.6",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_pps_500000": {
+   "run": "2026-11-06_203056_abl_flat5_pps_500000",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  },
+  "abl_flat5_pps_2000000": {
+   "run": "2026-11-06_203103_abl_flat5_pps_2000000",
+   "vehicles": 15,
+   "common_with_baseline": 15,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.000998001080006361,
+   "problems": []
+  }
+ },
+ "ok": true
+}

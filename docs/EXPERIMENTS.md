@@ -9,6 +9,22 @@ python main.py show data/runs/<run_folder> --view both
 
 Compare runs by looking at the `Done: … points per CAV scan` and `Mean CAV speed` lines, the two preview images, `spawn.json` and `meta.json`.
 
+## Status of the recorded results (checked 2026-11-06)
+
+| Exp | Recorded | Notes |
+|---|---|---|
+| e01 | `2026-10-22_215825_e01`, `2026-10-30_124010_e01_fixed` | first run: every CAV at 0 km/h and 11/24 vehicles outside the paper's area (led to the 5 s warm-up and the strict `spawn_bbox`); fixed run: 3/4 CAVs moving, 4/4 inside. **Both at the old junction 356** (recorded before junction 1221 was found) |
+| e02 | `2026-10-30_124058_e02_fixed` | 10 CAVs + 40 vehicles, 10/10 CAVs inside the area. **At the old junction 356** |
+| e03, e04, e06, e07 | not as single runs | covered in a controlled way (one change per run, fixed scene) by the sensitivity analysis: [SENSITIVITY.md](SENSITIVITY.md) (channels, range, noise, mount height) |
+| e05, e08 | **not recorded** | |
+| e09 | `…_e09_partial_sweep_demo` | 5 327 points per scan = 1/5 of a sweep (72°), as predicted |
+| e10 | `…_e10_export_ply` | `.ply` written next to `.npy`, same point counts |
+| e11 | `2026-10-31_130752_e11_figure2` | Figure 2 parked, CAVs 3–34 m from junction 1221 |
+| e12 | `2026-10-31_130817_e12_figure2_driving` | main 4-CAV dataset of the processing ([PROCESSING.md](PROCESSING.md)) |
+
+The "What to observe" column below is what each case is meant to show; measured values are in the runs above and in
+SENSITIVITY.md.
+
 ## Ready-made experiments
 
 ### `scenario/` — who is on the road

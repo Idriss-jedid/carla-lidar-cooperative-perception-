@@ -160,10 +160,11 @@ Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`fra
 | Module | What it does |
 |---|---|
 | `ground.py` | `patchwise_ground_mask(points)`: per-patch RANSAC ground planes, accepted only if they continue the ground from the sensor outwards (seed plane from `estimate_seed_plane`, height/tilt continuity with neighbour patches, no returns below). Uses only the points. See [PROCESSING.md](PROCESSING.md). |
+| `ego_mask.py` | `EgoGeometry` (CAV body box + LiDAR mount, `mount_valid`, `roof_clearance`), `geometry_for(blueprint, lidar_cfg)`, `ego_mask(points, geometry, margin)`: removes the returns on the CAV's own body, from calibration and the model's static box only. |
 | `road_filter.py` | `DrivableArea` (2D raster of the map's Driving / Parking / Bidirectional lanes, cached), `road_mask(points, pose, area)`: the paper's drivable-road pre-filter. |
 | `bev_grid.py` | `bev_from_points(points)`: occupancy, return count and mean intensity per BEV cell, sensor frame. |
 | `sectors.py` | `static_sectors(count, start)`, `sector_index`, `bev_sector_grid`, `voxel_downsample`, `sector_metadata` (size σ, quality S̃, footprint A per sector), `footprint_polygon`. |
-| `__main__.py` | `python -m cavlidar.backend.processing <run>`: road filter → ground removal → BEV → sectors → metadata for one recorded frame, into `<run>/processed/<frame>/`. |
+| `__main__.py` | `python -m cavlidar.backend.processing <run>`: ego mask → road filter → ground removal → BEV → sectors → metadata for one recorded frame, into `<run>/processed/<frame>/`. |
 
 ### `simulator/live.py`, `simulator/startup_map.py`
 `draw_plan` / `test_spawn` check a plan in the running simulator. `set_startup_map` writes the map CARLA opens at start (`DefaultEngine.ini`, backup kept).
@@ -176,7 +177,7 @@ Fixed names that are not parameters: LiDAR blueprint id, run folder layout (`fra
 |---|---|
 | `transform_to_dict(t)` | `carla.Transform` → `{x, y, z, roll, pitch, yaw}`. |
 | `pose_to_matrix(pose)` | 4×4 sensor→world matrix, same formula as CARLA. |
-| `sensor_to_world(points, pose)` | Moves a cloud into the world frame — the core operation of early (point-level) fusion. |
+| `sensor_to_world(points, pose)` | Moves a cloud into the world frame (used by the road filter, the world-frame plots and, later, point-level fusion). |
 | `in_bbox(x, y, bbox)` | Is a point inside `[x_min, x_max, y_min, y_max]`. |
 | `box_corners_2d(pose, extent, offset)` | 4 corners of a vehicle box seen from above. |
 
@@ -195,5 +196,5 @@ CARLA uses a **left-handed** frame (x forward, y right, z up); all plots invert 
 | add a parameter | add a field to the right dataclass in `core/config.py`, add it to `config/default.yaml`, document it in `PARAMETERS.md`, use `cfg.<section>.<field>` in the backend |
 | add a fixed choice | add an enum in `core/enums.py`, convert it in `config._from_dict` |
 | add a sensor (camera, radar) | new module in `backend/actors/`, attach it in `SimulationSession`, read it in `recorder.record` |
-| add a processing step (ground removal, BEV…) | new folder `backend/processing/` using `storage.load_frame` — it does not need CARLA |
+| add a processing step | a new module in `backend/processing/`, called from `processing/__main__.py`; read frames with `storage.load_frame` — it does not need CARLA |
 | expose it to users | one new function in `api.py` and one sub-command in `main.py` |

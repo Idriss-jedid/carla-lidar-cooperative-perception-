@@ -1,0 +1,19 @@
+# Label-timing diagnostic (not part of the benchmark): flat2 positions, CAVs driven at 30 km/h by the
+# Traffic Manager ignoring red lights, the others parked. Ground-truth boxes are compared with the moving
+# vehicles' returns by tools/eval_ablation.py --check-labels.
+simulation:
+  seed: 2101
+scenario:
+  num_cavs: 4
+  num_traffic: 11
+  spawn_center: [2.9, -136.5]
+  spawn_bbox: [-100, 100, -200, 200]
+  spawn_plan: config/spawn_plans/sensitivity/diag_cavs_moving.json
+  autopilot: false
+  speed_difference_range: [0.0, 0.0]
+  ignore_lights_range: [100.0, 100.0]
+recording:
+  warmup_ticks: 120
+  num_frames: 5
+  save_every: 2
+  camera: none

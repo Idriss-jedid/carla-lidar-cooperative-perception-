@@ -1,0 +1,15 @@
+# Sensitivity analysis, fixed scene "flat": the paper's Figure 2 at Town03 junction 1221
+# (4 CAVs + 11 vehicles, all parked and braked). Only the LiDAR changes between runs
+# (tools/run_ablation.py adds one --set per run); positions are checked to be identical.
+scenario:
+  num_cavs: 4
+  num_traffic: 11
+  spawn_center: [2.9, -136.5]
+  spawn_bbox: [-100, 100, -200, 200]
+  spawn_plan: config/spawn_plans/figure2_town03.json
+  autopilot: false
+recording:
+  warmup_ticks: 40      # parked vehicles settle on the road (spawn lift 0.4 m)
+  num_frames: 5         # same geometry, new random drop-off / noise each sweep
+  save_every: 2
+  camera: none

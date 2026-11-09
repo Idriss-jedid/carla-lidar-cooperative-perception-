@@ -1,0 +1,61 @@
+{
+ "scene": "pop3",
+ "baseline": "2026-11-06_204113_abl_pop3_base",
+ "runs": {
+  "abl_pop3_base": {
+   "run": "2026-11-06_204113_abl_pop3_base",
+   "vehicles": 34,
+   "common_with_baseline": 34,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_pop3_cavs_6": {
+   "run": "2026-11-06_204121_abl_pop3_cavs_6",
+   "vehicles": 34,
+   "common_with_baseline": 34,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_pop3_cavs_8": {
+   "run": "2026-11-06_204131_abl_pop3_cavs_8",
+   "vehicles": 34,
+   "common_with_baseline": 34,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_pop3_cavs_10": {
+   "run": "2026-11-06_204144_abl_pop3_cavs_10",
+   "vehicles": 34,
+   "common_with_baseline": 34,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_pop3_traffic_20": {
+   "run": "2026-11-06_204201_abl_pop3_traffic_20",
+   "vehicles": 24,
+   "common_with_baseline": 24,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_pop3_traffic_40": {
+   "run": "2026-11-06_204210_abl_pop3_traffic_40",
+   "vehicles": 44,
+   "common_with_baseline": 34,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  }
+ },
+ "ok": true
+}

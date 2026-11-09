@@ -1,0 +1,24 @@
+{
+ "scene": "moving2",
+ "factor": "height",
+ "runs": {
+  "1.6": "2026-11-06_205407_abl_moving2_height_1.6",
+  "1.9": "2026-11-06_205407_abl_moving2_height_1.9",
+  "2.4": "2026-11-06_205407_abl_moving2_height_2.4",
+  "2.8": "2026-11-06_205407_abl_moving2_height_2.8"
+ },
+ "frames": [
+  191704,
+  191706,
+  191708,
+  191710,
+  191712
+ ],
+ "max_vehicle_position_diff_m": 0.0,
+ "max_sensor_xy_diff_m": 0.006575529639089959,
+ "vehicles": 24,
+ "moving_vehicles_share": 0.7583333333333333,
+ "median_speed_moving_mps": 6.781639137705098,
+ "valid_moving": true,
+ "attempts": 1
+}

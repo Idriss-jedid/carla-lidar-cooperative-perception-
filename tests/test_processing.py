@@ -174,9 +174,86 @@ class TestProcessFrame(unittest.TestCase):
             self.assertEqual(len(sectors), 4)
             self.assertEqual(sum(s["points"] for s in sectors), len(pts))
             self.assertEqual(result["cavs"]["cav0"]["raw_points"], len(pts))
-            self.assertEqual(result["cavs"]["cav0"]["raw_points"],
-                             result["cavs"]["cav0"]["ground_points"] +
-                             result["cavs"]["cav0"]["non_ground_points"])
+            c = result["cavs"]["cav0"]
+            # every return lands in exactly one class; sigma (sector points) keeps the full scan
+            self.assertEqual(c["raw_points"], c["ego_points"] + c["offroad_points"] + c["ground_points"] +
+                             c["non_ground_points"])
+            self.assertGreater(c["ego_points"], 0)       # the synthetic slope has points inside the body box
+            self.assertTrue(c["ego_geometry"]["mount_valid"])
+
+
+class TestEgoMask(unittest.TestCase):
+    """Ego-body mask: calibration + the model's static body box only."""
+
+    def setUp(self):
+        from cavlidar.backend.processing import ego_mask as em
+        self.em = em
+        box = em.EGO_MODELS["vehicle.tesla.model3"]
+        self.extent, self.offset = np.array(box["extent"]), np.array(box["center_offset"])
+
+    def geometry(self, **mount):
+        cfg = {"mount_x": 0.0, "mount_y": 0.0, "mount_z": 2.4}
+        cfg.update(mount)
+        return self.em.geometry_for("vehicle.tesla.model3", cfg)
+
+    def body_points(self, n=2000, seed=0):
+        """Points on the surface of the body box, vehicle frame."""
+        rng = np.random.RandomState(seed)
+        p = rng.uniform(-1, 1, (n, 3))
+        axis = rng.randint(0, 3, n)
+        p[np.arange(n), axis] = np.sign(p[np.arange(n), axis])      # push each point onto a face
+        return p * self.extent + self.offset
+
+    def to_sensor(self, vehicle_xyz, geometry):
+        from cavlidar.backend.geometry.transforms import pose_to_matrix
+        inv = np.linalg.inv(pose_to_matrix(geometry.mount))
+        return vehicle_xyz @ inv[:3, :3].T + inv[:3, 3]
+
+    def test_body_removed_neighbours_kept_for_every_mount(self):
+        mounts = [dict(), dict(mount_z=1.6), dict(mount_z=1.9, mount_x=-0.5),          # A / low / B-C
+                  dict(mount_z=2.0, mount_x=0.8, mount_yaw=90.0, mount_pitch=10.0, mount_roll=-5.0)]  # rotated
+        for mount in mounts:
+            g = self.geometry(**mount)
+            body = self.to_sensor(self.body_points(), g)
+            self.assertTrue(self.em.ego_mask(body, g).all(), mount)
+            # a neighbour 0.5 m to the right of the body and a car 1 m ahead: kept
+            neighbour = self.body_points(seed=1) + [0.0, 2 * self.extent[1] + 0.5, 0.0]
+            ahead = self.body_points(seed=2) + [2 * self.extent[0] + 1.0, 0.0, 0.0]
+            for other in (neighbour, ahead):
+                self.assertFalse(self.em.ego_mask(self.to_sensor(other, g), g).any(), mount)
+
+    def test_slope_does_not_change_the_mask(self):
+        # a CAV pitched 12 degrees on a slope: the body is fixed in the sensor frame, so the same points
+        # (seen through the full world pose) are masked
+        from cavlidar.backend.geometry.transforms import pose_to_matrix
+        g = self.geometry(mount_z=1.9, mount_x=-0.5)
+        vehicle_pose = {"x": 40.0, "y": -134.0, "z": 3.0, "roll": 0.0, "pitch": 12.4, "yaw": 1.2}
+        world = self.body_points() @ pose_to_matrix(vehicle_pose)[:3, :3].T + pose_to_matrix(vehicle_pose)[:3, 3]
+        sensor_pose = pose_to_matrix(vehicle_pose) @ pose_to_matrix(g.mount)
+        inv = np.linalg.inv(sensor_pose)
+        in_sensor = world @ inv[:3, :3].T + inv[:3, 3]
+        self.assertTrue(self.em.ego_mask(in_sensor, g).all())
+
+    def test_invalid_mount_is_flagged(self):
+        self.assertTrue(self.geometry(mount_z=2.4).mount_valid)
+        self.assertTrue(self.geometry(mount_z=1.6).mount_valid)        # 0.12 m above the roof
+        self.assertAlmostEqual(self.geometry(mount_z=1.6).roof_clearance, 1.6 - 1.4797, places=3)
+        self.assertFalse(self.geometry(mount_z=1.2).mount_valid)       # inside the cabin
+        self.assertFalse(self.geometry(mount_z=0.5, mount_x=1.5).mount_valid)
+
+    def test_unknown_model_uses_its_static_box_only(self):
+        other = {"type_id": "vehicle.audi.tt", "extent": [2.09, 1.0, 0.69], "center_offset": [0.0, 0.0, 0.69],
+                 "pose": {"x": 999.0}}
+        g = self.em.geometry_for("vehicle.audi.tt", {"mount_z": 2.0}, other)
+        self.assertEqual(g.extent, (2.09, 1.0, 0.69))
+        self.assertIn("static box", g.source)
+        self.assertIsNone(self.em.geometry_for("vehicle.audi.tt", {"mount_z": 2.0}))
+
+    def test_real_close_pair_neighbour_untouched(self):
+        # routes_demo cav1 (mount 2.4 m) with cav_2 right next to it: none of its 4 108 body points is masked
+        data = np.load(str(DATA / "close_pair_cav1.npz"))
+        mask = self.em.ego_mask(data["points"], self.geometry())
+        self.assertEqual(int((mask & data["vehicle"]).sum()), 0)
 
 
 class TestStaticSectors(unittest.TestCase):

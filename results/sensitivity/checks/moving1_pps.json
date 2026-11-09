@@ -1,0 +1,23 @@
+{
+ "scene": "moving1",
+ "factor": "pps",
+ "runs": {
+  "500000": "2026-11-06_205650_abl_moving1_pps_500000",
+  "1000000": "2026-11-06_205650_abl_moving1_pps_1000000",
+  "2000000": "2026-11-06_205651_abl_moving1_pps_2000000"
+ },
+ "frames": [
+  197093,
+  197095,
+  197097,
+  197099,
+  197101
+ ],
+ "max_vehicle_position_diff_m": 0.0,
+ "max_sensor_xy_diff_m": 0.0,
+ "vehicles": 24,
+ "moving_vehicles_share": 0.8,
+ "median_speed_moving_mps": 6.944695611029919,
+ "valid_moving": true,
+ "attempts": 2
+}

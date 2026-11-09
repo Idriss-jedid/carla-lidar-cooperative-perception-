@@ -1,0 +1,56 @@
+{
+ "abl_flat2_base": {
+  "run": "2026-11-06_200544_abl_flat2_base",
+  "scans": 20,
+  "identical_nonground": 20,
+  "cli_mount_valid": [
+   true
+  ],
+  "eval_mount_valid": true
+ },
+ "abl_flat2_height_1.6": {
+  "run": "2026-11-06_200556_abl_flat2_height_1.6",
+  "scans": 20,
+  "identical_nonground": 20,
+  "cli_mount_valid": [
+   true
+  ],
+  "eval_mount_valid": true
+ },
+ "abl_flat2_invalid_mount": {
+  "run": "2026-11-06_200638_abl_flat2_invalid_mount",
+  "scans": 20,
+  "identical_nonground": 20,
+  "cli_mount_valid": [
+   false
+  ],
+  "eval_mount_valid": false
+ },
+ "abl_slope2_base": {
+  "run": "2026-11-06_200647_abl_slope2_base",
+  "scans": 20,
+  "identical_nonground": 20,
+  "cli_mount_valid": [
+   true
+  ],
+  "eval_mount_valid": true
+ },
+ "abl_slope2_pps_2000000": {
+  "run": "2026-11-06_200714_abl_slope2_pps_2000000",
+  "scans": 20,
+  "identical_nonground": 20,
+  "cli_mount_valid": [
+   true
+  ],
+  "eval_mount_valid": true
+ },
+ "abl_slope2_invalid_mount": {
+  "run": "2026-11-06_200734_abl_slope2_invalid_mount",
+  "scans": 20,
+  "identical_nonground": 20,
+  "cli_mount_valid": [
+   false
+  ],
+  "eval_mount_valid": false
+ }
+}

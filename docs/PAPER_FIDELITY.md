@@ -1,6 +1,6 @@
 # Fidelity to the paper
 
-How close this repository is to the setup of the paper (Section III, Table 1). This repository covers **data collection only**; it is not yet a reproduction of the paper's results.
+How close this repository is to the setup of the paper (Section III, Table 1). This repository covers data collection and the per-CAV processing up to the BEV and the sector metadata; the sharing optimization, the fusion and the detection that build on it are not part of it. It is **not yet a reproduction of the paper's results**. Summary of the work up to the BEV: [SUMMARY_BEV.md](SUMMARY_BEV.md).
 
 ## Matches Table 1
 
@@ -24,7 +24,7 @@ How close this repository is to the setup of the paper (Section III, Table 1). T
 | Max speed / tailgate speed | 20–50 km/h / 30–60 km/h | not controlled; only the % offset to the speed limit | Not implemented. |
 | Random yaw | −180° to 180° | heading of CARLA's road spawn point | Not implemented: a random heading under autopilot spawns cars against the lane. Paper's exact policy unknown. |
 | Number of scenarios | 57 per CAV count, 228 in total | one scenario per run | Scenario generator still to write. |
-| Processing | ground removal, BEV grids, sectorization, ILP / greedy-swap, PIXOR, AP@0.5 | `bev.py` only draws point clouds | Next phases (see README roadmap). |
+| Processing | ground removal, BEV grids, sectorization, ILP / greedy-swap, PIXOR, AP@0.5 | ego-body mask, drivable-road filter, ground removal, BEV, static sectors and metadata ([PROCESSING.md](PROCESSING.md)) | Implemented with our choices where the paper gives none. ILP / Greedy-Swap, fusion, PIXOR and AP@0.5 are outside this repository. |
 
 ## Not specified in the paper (our choices)
 

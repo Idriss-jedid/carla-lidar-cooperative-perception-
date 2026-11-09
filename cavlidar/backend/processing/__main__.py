@@ -8,6 +8,7 @@ import numpy as np
 import yaml
 
 from .bev_grid import bev_from_points
+from .ego_mask import DEFAULT_MARGIN, ego_mask, geometry_for
 from .sectors import bev_sector_grid, sector_metadata, static_sectors
 from .ground import estimate_seed_plane, patchwise_ground_mask
 from .road_filter import load_drivable_area, road_mask
@@ -57,7 +58,8 @@ def _preview(path, raw, nonground, bev, name, sectors=None, metadata=None):
 def process_frame(run_dir, frame=None, patch_size=8.0, threshold=0.18,
                   iterations=70, resolution=0.5, view_range=60.0, preview=True,
                   max_step=0.5, max_slope=15.0, road_filter=True, road_margin=0.5,
-                  sector_count=4, sector_start=math.pi / 4, downsample=0.2):
+                  sector_count=4, sector_start=math.pi / 4, downsample=0.2,
+                  ego_masking=True, ego_margin=DEFAULT_MARGIN):
     """Process one stored multi-CAV frame without connecting to CARLA.
 
     Original data/runs/.../frames/ is NEVER modified. The output goes to
@@ -83,6 +85,7 @@ def process_frame(run_dir, frame=None, patch_size=8.0, threshold=0.18,
     area = _drivable_area(meta.get("town"), road_margin) if road_filter else None
     sectors = static_sectors(sector_count, sector_start)
     lidar_range = _lidar_range(root)
+    run_cfg = _run_config(root)
     results = {}
     metadata = {"frame": frame, "town": meta.get("town"), "timestamp": meta.get("timestamp"),
                 "sectorization": "static", "cavs": {}}
@@ -91,11 +94,24 @@ def process_frame(run_dir, frame=None, patch_size=8.0, threshold=0.18,
         if not source.is_file():
             raise FileNotFoundError("Missing .npy scan for {}: {}".format(name, source))
         raw = np.load(str(source), allow_pickle=False)
+        ego = np.zeros(len(raw), dtype=bool)
+        geometry = None
+        if ego_masking:  # returns on the CAV's own body: not obstacles, removed before anything else
+            geometry = _ego_geometry(run_cfg, meta, name)
+            if geometry is None:
+                raise ValueError("{}: no body box for this CAV model; add it to ego_mask.EGO_MODELS or use "
+                                 "--no-ego-mask".format(name))
+            if not geometry.mount_valid:
+                print("WARNING {}: the LiDAR mount {} is inside the vehicle body; masking cannot make this "
+                      "recording valid".format(name, geometry.mount))
+            ego = ego_mask(raw, geometry, ego_margin)
+            np.save(str(out_dir / "{}_ego.npy".format(name)), raw[ego])
         on_road = np.ones(len(raw), dtype=bool)
         if area is not None:  # paper: isolate the drivable road region first
             on_road = road_mask(raw, meta["cavs"][name]["sensor_pose"], area)
-            np.save(str(out_dir / "{}_offroad.npy".format(name)), raw[~on_road])
-        all_points, raw = raw, raw[on_road]
+            np.save(str(out_dir / "{}_offroad.npy".format(name)), raw[~on_road & ~ego])
+        # sigma (sector payload) stays the full original scan; everything else works on what is left
+        all_points, raw = raw, raw[on_road & ~ego]
         seed_plane = estimate_seed_plane(raw, threshold, max_slope_deg=max_slope)
         mask = patchwise_ground_mask(raw, patch_size=patch_size,
                                      residual_threshold=threshold,
@@ -118,7 +134,9 @@ def process_frame(run_dir, frame=None, patch_size=8.0, threshold=0.18,
             _preview(out_dir / "{}_preview.png".format(name), all_points, non_ground, bev, name,
                      sectors, sector_meta)
         results[name] = {"raw_points": int(len(all_points)),
-                         "offroad_points": int((~on_road).sum()),
+                         "ego_points": int(ego.sum()),
+                         "ego_geometry": geometry.summary() if geometry is not None else None,
+                         "offroad_points": int((~on_road & ~ego).sum()),
                          "ground_points": int(mask.sum()),
                          "non_ground_points": int(len(non_ground)),
                          "occupied_bev_cells": int(bev.occupancy.sum()),
@@ -127,8 +145,9 @@ def process_frame(run_dir, frame=None, patch_size=8.0, threshold=0.18,
                          "bev_shape": list(bev.occupancy.shape),
                          "sectors": [{k: m[k] for k in ("index", "points", "size_mb", "non_ground_points",
                                                          "downsampled_points", "quality")} for m in sector_meta]}
-        print("{}: raw={}, off-road={}, ground={}, non-ground={}, occupied BEV cells={}".format(
-            name, len(all_points), (~on_road).sum(), mask.sum(), len(non_ground), bev.occupancy.sum()))
+        print("{}: raw={}, ego={}, off-road={}, ground={}, non-ground={}, occupied BEV cells={}".format(
+            name, len(all_points), ego.sum(), (~on_road & ~ego).sum(), mask.sum(), len(non_ground),
+            bev.occupancy.sum()))
     summary = {
         "frame": frame,
         "method": ("drivable_road_filter(OpenDRIVE 2D lanes)+" if area is not None else "") +
@@ -144,6 +163,7 @@ def process_frame(run_dir, frame=None, patch_size=8.0, threshold=0.18,
         "settings": {"patch_size_m": patch_size, "ransac_threshold_m": threshold,
                      "ransac_iterations": iterations, "max_step_m": max_step,
                      "max_slope_deg": max_slope, "road_filter": area is not None,
+                     "ego_mask": ego_masking, "ego_margin_m": ego_margin,
                      "road_margin_m": road_margin, "bev_resolution_m": resolution,
                      "bev_half_range_m": view_range, "sectorization": "static",
                      "sector_count": sector_count, "sector_start_rad": sector_start,
@@ -155,6 +175,25 @@ def process_frame(run_dir, frame=None, patch_size=8.0, threshold=0.18,
     with open(str(out_dir / "metadata.json"), "w", encoding="utf-8") as fh:  # what goes to the central node
         json.dump(metadata, fh, indent=1)
     return out_dir
+
+
+def _run_config(run_dir):
+    """The run's saved config.yaml as a dict ({} if missing)."""
+    try:
+        with open(str(Path(run_dir) / "config.yaml"), encoding="utf-8") as fh:
+            return yaml.safe_load(fh) or {}
+    except OSError:
+        return {}
+
+
+def _ego_geometry(run_cfg, meta, cav):
+    """Body box of the CAV model + LiDAR mount of the run (the CAV's own static box as a fallback)."""
+    blueprint = run_cfg.get("scenario", {}).get("cav_blueprint", "vehicle.tesla.model3")
+    lidar = dict(run_cfg.get("lidar", {}))
+    lidar.setdefault("mount_z", meta["cavs"][cav].get("mount_z", 2.4))
+    own_id = meta["cavs"][cav].get("vehicle_id")
+    own = next((v for v in meta.get("vehicles", []) if v.get("id") == own_id), None)
+    return geometry_for(blueprint, lidar, own)
 
 
 def _lidar_range(run_dir, default=120.0):
@@ -198,6 +237,9 @@ def main(argv=None):
                         help="start of the first sector, degrees from forward towards the right")
     parser.add_argument("--downsample", type=float, default=0.2,
                         help="voxel size (m) of the averaging downsampling of the quality metric")
+    parser.add_argument("--no-ego-mask", action="store_true", help="keep the returns on the CAV's own body")
+    parser.add_argument("--ego-margin", type=float, default=DEFAULT_MARGIN,
+                        help="metres added around the CAV's body box")
     parser.add_argument("--resolution", type=float, default=0.5)
     parser.add_argument("--range", type=float, default=60.0)
     parser.add_argument("--no-preview", action="store_true")
@@ -209,7 +251,8 @@ def main(argv=None):
                             max_step=args.max_step, max_slope=args.max_slope,
                             road_filter=not args.no_road_filter, road_margin=args.road_margin,
                             sector_count=args.sectors, sector_start=math.radians(args.sector_start),
-                            downsample=args.downsample)
+                            downsample=args.downsample, ego_masking=not args.no_ego_mask,
+                            ego_margin=args.ego_margin)
     print("[SUCCESS] Saved processed data to {}".format(out_dir))
 
 

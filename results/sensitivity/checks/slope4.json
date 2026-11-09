@@ -1,0 +1,160 @@
+{
+ "scene": "slope4",
+ "baseline": "2026-11-06_203345_abl_slope4_base",
+ "runs": {
+  "abl_slope4_base": {
+   "run": "2026-11-06_203345_abl_slope4_base",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_noise_0.02": {
+   "run": "2026-11-06_203354_abl_slope4_noise_0.02",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_noise_0.05": {
+   "run": "2026-11-06_203402_abl_slope4_noise_0.05",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_noise_0.1": {
+   "run": "2026-11-06_203410_abl_slope4_noise_0.1",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_height_1.6": {
+   "run": "2026-11-06_203418_abl_slope4_height_1.6",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_height_1.9": {
+   "run": "2026-11-06_203426_abl_slope4_height_1.9",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_height_2.8": {
+   "run": "2026-11-06_203437_abl_slope4_height_2.8",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_channels_16": {
+   "run": "2026-11-06_203446_abl_slope4_channels_16",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_channels_64": {
+   "run": "2026-11-06_203455_abl_slope4_channels_64",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_range_50": {
+   "run": "2026-11-06_203504_abl_slope4_range_50",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_range_80": {
+   "run": "2026-11-06_203512_abl_slope4_range_80",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_dropoff_0": {
+   "run": "2026-11-06_203520_abl_slope4_dropoff_0",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_dropoff_0.2": {
+   "run": "2026-11-06_203531_abl_slope4_dropoff_0.2",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_dropoff_0.3": {
+   "run": "2026-11-06_203541_abl_slope4_dropoff_0.3",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_dropoff_0.6": {
+   "run": "2026-11-06_203551_abl_slope4_dropoff_0.6",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_pps_500000": {
+   "run": "2026-11-06_203558_abl_slope4_pps_500000",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  },
+  "abl_slope4_pps_2000000": {
+   "run": "2026-11-06_203604_abl_slope4_pps_2000000",
+   "vehicles": 10,
+   "common_with_baseline": 10,
+   "max_position_diff_m": 0.0,
+   "max_rotation_diff_deg": 0.0,
+   "max_motion_within_run_m": 0.0,
+   "problems": []
+  }
+ },
+ "ok": true
+}

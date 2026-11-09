@@ -1,0 +1,516 @@
+{
+  "map": "Town03",
+  "source": "tools/make_sensitivity_scenes.py pop3 --kind population --seed 2303 (cavs=10)",
+  "vehicles": [
+    {
+      "role": "cav",
+      "index": 0,
+      "pose": {
+        "x": -29.36,
+        "y": -138.9,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -178.77
+      },
+      "road_id": 19,
+      "lane_id": -1,
+      "pool_index": 0
+    },
+    {
+      "role": "cav",
+      "index": 1,
+      "pose": {
+        "x": 5.76,
+        "y": -110.9,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 28,
+      "lane_id": -1,
+      "pool_index": 1
+    },
+    {
+      "role": "cav",
+      "index": 2,
+      "pose": {
+        "x": 6.7,
+        "y": -148.92,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 29,
+      "lane_id": -1,
+      "pool_index": 2
+    },
+    {
+      "role": "cav",
+      "index": 3,
+      "pose": {
+        "x": 7.26,
+        "y": -171.92,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 29,
+      "lane_id": -1,
+      "pool_index": 3
+    },
+    {
+      "role": "cav",
+      "index": 4,
+      "pose": {
+        "x": -0.99,
+        "y": -121.07,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 28,
+      "lane_id": 2,
+      "pool_index": 4
+    },
+    {
+      "role": "cav",
+      "index": 5,
+      "pose": {
+        "x": -4.86,
+        "y": -106.16,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 28,
+      "lane_id": 3,
+      "pool_index": 5
+    },
+    {
+      "role": "cav",
+      "index": 6,
+      "pose": {
+        "x": -17.36,
+        "y": -138.64,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -178.77
+      },
+      "road_id": 19,
+      "lane_id": -1,
+      "pool_index": 6
+    },
+    {
+      "role": "cav",
+      "index": 7,
+      "pose": {
+        "x": 9.33,
+        "y": -113.81,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 28,
+      "lane_id": -2,
+      "pool_index": 7
+    },
+    {
+      "role": "cav",
+      "index": 8,
+      "pose": {
+        "x": -4.64,
+        "y": -115.15,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 28,
+      "lane_id": 3,
+      "pool_index": 8
+    },
+    {
+      "role": "cav",
+      "index": 9,
+      "pose": {
+        "x": 10.61,
+        "y": -165.83,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 29,
+      "lane_id": -2,
+      "pool_index": 9
+    },
+    {
+      "role": "traffic",
+      "index": 0,
+      "pose": {
+        "x": 84.28,
+        "y": -108.01,
+        "z": 8.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -87.98
+      },
+      "road_id": 42,
+      "lane_id": 1,
+      "pool_index": 10
+    },
+    {
+      "role": "traffic",
+      "index": 1,
+      "pose": {
+        "x": -73.25,
+        "y": -174.92,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -85.77
+      },
+      "road_id": 2,
+      "lane_id": 3,
+      "pool_index": 11
+    },
+    {
+      "role": "traffic",
+      "index": 2,
+      "pose": {
+        "x": -78.16,
+        "y": -107.94,
+        "z": -0.34,
+        "roll": 0.0,
+        "pitch": 1.3,
+        "yaw": -90.16
+      },
+      "road_id": 3,
+      "lane_id": 2,
+      "pool_index": 12
+    },
+    {
+      "role": "traffic",
+      "index": 3,
+      "pose": {
+        "x": -6.12,
+        "y": -55.17,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 28,
+      "lane_id": 3,
+      "pool_index": 13
+    },
+    {
+      "role": "traffic",
+      "index": 4,
+      "pose": {
+        "x": 86.1,
+        "y": -162.32,
+        "z": 5.3,
+        "roll": 0.0,
+        "pitch": -12.75,
+        "yaw": -89.15
+      },
+      "road_id": 41,
+      "lane_id": 1,
+      "pool_index": 14
+    },
+    {
+      "role": "traffic",
+      "index": 5,
+      "pose": {
+        "x": -41.43,
+        "y": -135.66,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 1.23
+      },
+      "road_id": 19,
+      "lane_id": 1,
+      "pool_index": 15
+    },
+    {
+      "role": "traffic",
+      "index": 6,
+      "pose": {
+        "x": 84.67,
+        "y": -119.01,
+        "z": 8.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -87.98
+      },
+      "road_id": 42,
+      "lane_id": 1,
+      "pool_index": 16
+    },
+    {
+      "role": "traffic",
+      "index": 7,
+      "pose": {
+        "x": 4.28,
+        "y": -50.91,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 28,
+      "lane_id": -1,
+      "pool_index": 17
+    },
+    {
+      "role": "traffic",
+      "index": 8,
+      "pose": {
+        "x": -3.68,
+        "y": -154.18,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 29,
+      "lane_id": 3,
+      "pool_index": 18
+    },
+    {
+      "role": "traffic",
+      "index": 9,
+      "pose": {
+        "x": 59.54,
+        "y": -196.01,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 1.44
+      },
+      "road_id": 1,
+      "lane_id": 2,
+      "pool_index": 19
+    },
+    {
+      "role": "traffic",
+      "index": 10,
+      "pose": {
+        "x": 6.99,
+        "y": -160.92,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 29,
+      "lane_id": -1,
+      "pool_index": 20
+    },
+    {
+      "role": "traffic",
+      "index": 11,
+      "pose": {
+        "x": -76.74,
+        "y": -175.18,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -85.77
+      },
+      "road_id": 2,
+      "lane_id": 2,
+      "pool_index": 21
+    },
+    {
+      "role": "traffic",
+      "index": 12,
+      "pose": {
+        "x": -73.87,
+        "y": -164.03,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -86.73
+      },
+      "road_id": 2,
+      "lane_id": 3,
+      "pool_index": 22
+    },
+    {
+      "role": "traffic",
+      "index": 13,
+      "pose": {
+        "x": -74.68,
+        "y": -114.95,
+        "z": -0.2,
+        "roll": 0.0,
+        "pitch": 0.99,
+        "yaw": -90.16
+      },
+      "road_id": 3,
+      "lane_id": 3,
+      "pool_index": 23
+    },
+    {
+      "role": "traffic",
+      "index": 14,
+      "pose": {
+        "x": 30.77,
+        "y": -134.11,
+        "z": 1.11,
+        "roll": 0.0,
+        "pitch": 7.72,
+        "yaw": 1.23
+      },
+      "road_id": 18,
+      "lane_id": 1,
+      "pool_index": 24
+    },
+    {
+      "role": "traffic",
+      "index": 15,
+      "pose": {
+        "x": 80.61,
+        "y": -103.14,
+        "z": 8.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 92.02
+      },
+      "road_id": 42,
+      "lane_id": -1,
+      "pool_index": 25
+    },
+    {
+      "role": "traffic",
+      "index": 16,
+      "pose": {
+        "x": 82.54,
+        "y": -159.38,
+        "z": 5.9,
+        "roll": 0.0,
+        "pitch": 10.14,
+        "yaw": 91.2
+      },
+      "road_id": 41,
+      "lane_id": -1,
+      "pool_index": 26
+    },
+    {
+      "role": "traffic",
+      "index": 17,
+      "pose": {
+        "x": 8.64,
+        "y": -85.82,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.59
+      },
+      "road_id": 28,
+      "lane_id": -2,
+      "pool_index": 27
+    },
+    {
+      "role": "traffic",
+      "index": 18,
+      "pose": {
+        "x": -74.43,
+        "y": -152.16,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -88.0
+      },
+      "road_id": 2,
+      "lane_id": 3,
+      "pool_index": 28
+    },
+    {
+      "role": "traffic",
+      "index": 19,
+      "pose": {
+        "x": -84.85,
+        "y": -154.54,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 92.23
+      },
+      "road_id": 2,
+      "lane_id": -1,
+      "pool_index": 29
+    },
+    {
+      "role": "traffic",
+      "index": 20,
+      "pose": {
+        "x": -1.61,
+        "y": -96.07,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 28,
+      "lane_id": 2,
+      "pool_index": 30
+    },
+    {
+      "role": "traffic",
+      "index": 21,
+      "pose": {
+        "x": -3.48,
+        "y": -162.18,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 29,
+      "lane_id": 3,
+      "pool_index": 31
+    },
+    {
+      "role": "traffic",
+      "index": 22,
+      "pose": {
+        "x": 37.77,
+        "y": -133.96,
+        "z": 2.26,
+        "roll": 0.0,
+        "pitch": 11.0,
+        "yaw": 1.23
+      },
+      "road_id": 18,
+      "lane_id": 1,
+      "pool_index": 32
+    },
+    {
+      "role": "traffic",
+      "index": 23,
+      "pose": {
+        "x": 0.09,
+        "y": -165.09,
+        "z": 0.0,
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": 91.41
+      },
+      "road_id": 29,
+      "lane_id": 2,
+      "pool_index": 33
+    }
+  ]
+}
