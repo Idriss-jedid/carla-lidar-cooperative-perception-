@@ -19,11 +19,11 @@ How close this repository is to the setup of the paper (Section III, Table 1). T
 
 | Item | Paper | Here | Status |
 |---|---|---|---|
-| Scenario framework | CARLA + OpenCDA (scenario management, annotations) | CARLA Python API + Traffic Manager; ground truth read from CARLA actors | Same information, different tool. OpenCDA not integrated. |
-| Traffic-light compliance | 0–100 % ignored | `[0, 0]` by default, `[0, 100]` in `e08` | Must vary across the scenario set. |
-| Max speed / tailgate speed | 20–50 km/h / 30–60 km/h | not controlled; only the % offset to the speed limit | Not implemented. |
-| Random yaw | −180° to 180° | heading of CARLA's road spawn point | Not implemented: a random heading under autopilot spawns cars against the lane. Paper's exact policy unknown. |
-| Number of scenarios | 57 per CAV count, 228 in total | one scenario per run | Scenario generator still to write. |
+| Scenario framework | CARLA + OpenCDA (scenario management, annotations) | main recorder: CARLA Python API + Traffic Manager, ground truth read from CARLA actors. `tools/opencda_scenario.py`: OpenCDA, same run format ([OPENCDA.md](OPENCDA.md)) | Both available. |
+| Traffic-light compliance | 0–100 % ignored | main recorder: `[0, 0]` by default, `[0, 100]` in `e08`. OpenCDA scenarios: 0–100 % drawn per vehicle | Must vary across the scenario set. |
+| Max speed / tailgate speed | 20–50 km/h / 30–60 km/h | main recorder: not controlled, only the % offset to the speed limit. OpenCDA scenarios: drawn per CAV, OpenCDA's behaviour agent drives | OpenCDA scenarios only. |
+| Random yaw | −180° to 180° | heading of CARLA's road spawn point (OpenCDA does the same) | Not implemented: a random heading under autopilot spawns cars against the lane. Paper's exact policy unknown. |
+| Number of scenarios | 57 per CAV count, 228 in total | `tools/opencda_scenario.py` draws one scenario per seed and CAV count | Generator written; the 228 not run yet. |
 | Processing | ground removal, BEV grids, sectorization, ILP / greedy-swap, PIXOR, AP@0.5 | ego-body mask, drivable-road filter, ground removal, BEV, static sectors and metadata ([PROCESSING.md](PROCESSING.md)) | Implemented with our choices where the paper gives none. ILP / Greedy-Swap, fusion, PIXOR and AP@0.5 are outside this repository. |
 
 ## Not specified in the paper (our choices)

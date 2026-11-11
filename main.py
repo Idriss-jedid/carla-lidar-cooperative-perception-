@@ -5,7 +5,9 @@ Command-line entry point.
     python main.py drive  --seconds 40
     python main.py record --config config/experiments/e02_paper_10cavs.yaml --name dense
     python main.py record --set lidar.channels=64 --set scenario.num_cavs=6
+    python main.py record --config ... --name e12 --process   # then straight on to the BEV
     python main.py show   data/runs/<run_folder> --view world
+    python main.py process data/runs/<run_folder>             # BEV + sector metadata of every frame
     python main.py editor --map Town05            # place vehicles by hand (window)
     python main.py xosc-import scenario.xosc --name qgis_trial   # OpenSCENARIO -> plan + experiment
     python main.py xosc-export config/spawn_plans/figure2_town03.json figure2.xosc
@@ -15,6 +17,7 @@ always loaded first. --set overrides any single parameter.
 """
 import argparse
 import logging
+import os
 import sys
 
 from cavlidar import CavLidarError, ViewMode, api
@@ -35,10 +38,16 @@ def build_parser():
     drive.add_argument("--seconds", type=float, default=40.0)
     record = sub.add_parser("record", parents=[common], help="record LiDAR sweeps + ground truth")
     record.add_argument("--name", default="run", help="suffix of the run folder")
+    record.add_argument("--process", action="store_true",
+                        help="after recording, process every frame up to the BEV and the sector metadata")
     show = sub.add_parser("show", parents=[common], help="plot a recorded frame (no CARLA needed)")
     show.add_argument("run_dir")
     show.add_argument("--frame", type=int, default=None)
     show.add_argument("--view", default=ViewMode.BOTH.value, choices=[v.value for v in ViewMode])
+    process = sub.add_parser("process", parents=[common],
+                             help="recorded frames -> BEV grids + sector metadata (no CARLA needed)")
+    process.add_argument("run_dir")
+    process.add_argument("--frame", type=int, default=None, help="one frame only (default: every frame)")
     editor = sub.add_parser("editor", parents=[common], help="place vehicles by hand on any map (window)")
     editor.add_argument("--map", default=None, help="map to open, e.g. Town05 (default: last used)")
     editor.add_argument("--plan", default=None, help="spawn plan to open (.json)")
@@ -64,6 +73,8 @@ def main(argv=None):
         if args.command == "show":
             api.show_frame(args.run_dir, args.frame, args.view)
             return 0
+        if args.command == "process":
+            return _process(args.run_dir, None if args.frame is None else [args.frame])
         cfg = api.load_config(*args.config, overrides=args.set)
         if args.command == "check":
             api.check_connection(cfg)
@@ -73,6 +84,8 @@ def main(argv=None):
         elif args.command == "record":
             run_dir = api.record_lidar(cfg, args.name)
             print("[SUCCESS] Run saved in {}".format(run_dir))
+            if args.process:
+                return _process(run_dir)
         elif args.command == "editor":
             api.open_editor(cfg, args.map, args.plan)
         elif args.command == "xosc-import":
@@ -89,6 +102,19 @@ def main(argv=None):
     except KeyboardInterrupt:
         logging.warning("Interrupted; CARLA actors were cleaned up.")
         return 130
+
+
+def _process(run_dir, frames=None):
+    """Process a run up to the BEV; a failure keeps the recording and says how to retry."""
+    try:
+        out = api.process_recording(run_dir, frames)
+    except (OSError, ValueError) as exc:
+        logging.error("Processing failed: %s\nThe recording is kept. Retry with: python main.py process %s",
+                      exc, run_dir)
+        return 1
+    print("[SUCCESS] BEV grids and sector metadata of {} frame(s) in {}".format(
+        len(out), os.path.join(run_dir, "processed")))
+    return 0
 
 
 if __name__ == "__main__":

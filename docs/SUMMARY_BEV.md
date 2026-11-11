@@ -131,7 +131,7 @@ python tools/record_moving_sensors.py --scenes moving1 moving2
 python tools/eval_ablation.py --timing-repeats 3       # CARLA closed for timing
 python tools/audit_sensitivity.py
 python tools/diagnose_label_alignment.py record && python tools/diagnose_label_alignment.py analyse
-python -m unittest discover -s tests -t .             # 99 tests, no CARLA needed
+python -m unittest discover -s tests -t .             # 115 tests, no CARLA needed
 ```
 
 | Figure | File | Source data |

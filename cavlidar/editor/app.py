@@ -6,29 +6,38 @@ The scenario editor window.
     python main.py editor --plan config/spawn_plans/figure2_town03.json
 
 Left: the map (roads drawn from OpenDRIVE, or an aerial photo taken from CARLA).
-Right: vehicles, placement rules, CARLA tools, export / record.
+Right: vehicles, placement rules, CARLA tools, export / record (with the LiDAR and
+simulation settings), and the BEV of the recordings.
 
 Works without CARLA running: maps come from the OpenDRIVE files shipped with
-CARLA. CARLA is only needed to preview, test-spawn, take aerial photos and record.
+CARLA. CARLA is only needed to preview, test-spawn, take aerial photos and record;
+processing a recording up to the BEV and showing it need no CARLA.
 """
 import math
 import os
 import queue
 import threading
+import time
 import tkinter as tk
 from dataclasses import replace
 from tkinter import filedialog, messagebox, ttk
 
+import numpy as np
+
 from ..backend.actors.spawn_plan import DEFAULT_ROUTE_SPEED, MAX_SPEED, PROJECT_ROOT
+from ..backend.geometry.transforms import box_corners_2d
 from ..backend.maps import catalog, raster, routes
 from ..backend.maps.road_map import RoadMap, wrap_degrees
 from ..core.enums import Role, RouteEnd
 from ..core.errors import RouteError
 from . import export
+from . import results
 from . import settings
+from . import simulation
 from .map_view import MapView
 from .settings import MAPS_CACHE, load_settings, save_settings
 from .model import PlannedVehicle, ScenarioPlan, footprint
+from .widgets import color_button, scrolling_frame, tip
 
 PAPER_BBOX = [-100.0, 100.0, -200.0, 200.0]
 
@@ -36,6 +45,19 @@ COLORS = {Role.CAV: "#3d8bfd", Role.TRAFFIC: "#ff7043"}
 SELECTED = "#ffd54f"
 OK_GHOST, BAD_GHOST = "#7ee787", "#ff6b6b"
 STOP_MARK = "#e53935"
+# one colour per CAV for its BEV cells on the (dark) map
+BEV_COLORS = ("#4f9dff", "#ff8a4c", "#33d19a", "#c38cff", "#ffd54f", "#ff6fa8", "#5ad7e8", "#d4a373", "#b0bec5",
+              "#a5d6a7")
+TRUTH_OUTLINE = "#c9d1d9"
+# simulation bar
+START_GREEN, PAUSE_AMBER, STOP_GREY, REC_RED = "#2e7d32", "#b26a00", "#455a64", "#c62828"
+BUTTON_OFF = "#c3c7cc"       # a button that cannot be pressed now
+LIVE_TRAFFIC_LABELS = 9.0    # px per metre from which traffic vehicles get a label in the live view
+CARLA_ACTIONS = ("Show the plan in the CARLA window", "Test spawn (spawn, check, remove)",
+                 "Record in a new console (fixed frames)...", "Take aerial photo of this map")
+STARTUP_MAP = "Start CARLA on this map next time..."
+WATCH_EVERY_MS = 3000      # how often a recording started from the editor is checked
+WATCH_IDLE_S = 180         # stop watching when nothing changed for this long
 FONT = ("Segoe UI", 10)
 
 
@@ -100,12 +122,28 @@ def _job_aerial(worker, town, bounds, ppm, progress):
     return town
 
 
+# ---------------------------------------------------------------------- offline jobs (no CARLA)
+
+def _job_process(worker, run_dir, frames):
+    from .. import api
+    return run_dir, api.process_recording(run_dir, frames, preview="none")
+
+
+def _job_figure(worker, run_dir, frame, cav):
+    return results.make_figure(run_dir, frame, cav)
+
+
+def _job_view(worker, run_dir, frame, which, cav):
+    return results.make_view(run_dir, frame, which, cav)
+
+
 class EditorApp:
 
     def __init__(self, root, cfg, town=None, plan_path=None):
         self.root, self.cfg = root, cfg
         self.settings = load_settings()
         self.worker = CarlaWorker(cfg)
+        self.offline = CarlaWorker(cfg)   # processing and figures, so CARLA jobs never wait for them
         self.server_town = None
         self.maps = []
         self.road_map = None
@@ -132,6 +170,15 @@ class EditorApp:
         self.status = tk.StringVar()
         self.cursor = tk.StringVar()
         self.carla_status = tk.StringVar(value="CARLA: checking...")
+        self.show_bev = tk.BooleanVar(value=False)
+        self.show_truth = tk.BooleanVar(value=True)
+        self.runs = []             # recorded runs (results.RunInfo), newest first
+        self.bev = None            # results.BevOverlay of the selected frame, or None
+        self._watch = None         # recording started from the editor, until it is done
+        self._scroll_areas = []    # (tab, canvas) of the scrolling tabs
+        self.sim = None            # simulation.LiveSimulation while one runs
+        self._live = None          # its last simulation.LiveView
+        self._setting_widgets = []  # disabled while a simulation runs
 
         self._build()
         self._find_maps()
@@ -140,6 +187,7 @@ class EditorApp:
         else:
             self.open_map(self.plan.town)
         self.check_carla()
+        self.refresh_runs()
         self.root.after(100, self._poll_worker)
         # the window has its real size only once shown
         self.root.after(250, self.fit_vehicles)
@@ -161,12 +209,14 @@ class EditorApp:
         style.configure("Title.TLabel", font=("Segoe UI", 11, "bold"))
         style.configure("Hint.TLabel", foreground="#6b7480")
         style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"))
+        style.configure("Sim.TLabel", font=("Segoe UI", 10))
+        style.configure("TLabelframe.Label", font=("Segoe UI", 10, "bold"))
 
         self._build_menu()
         bar = ttk.Frame(root, padding=(8, 6))
         bar.pack(side="top", fill="x")
         ttk.Label(bar, text="Map", style="Title.TLabel").pack(side="left")
-        self.map_box = ttk.Combobox(bar, state="readonly", width=34)
+        self.map_box = ttk.Combobox(bar, state="readonly", width=30)
         self.map_box.pack(side="left", padx=(6, 16))
         self.map_box.bind("<<ComboboxSelected>>", lambda e: self._on_map_chosen())
         ttk.Label(bar, text="Background", style="Title.TLabel").pack(side="left")
@@ -182,6 +232,24 @@ class EditorApp:
         ttk.Button(bar, text="Redo", command=self.redo).pack(side="left")
         ttk.Label(bar, textvariable=self.carla_status).pack(side="right")
 
+        sim = ttk.Frame(root, padding=(8, 0, 8, 6))
+        sim.pack(side="top", fill="x")
+        self.btn_start = tip(color_button(sim, "\u25b6  Start", START_GREEN, self.start_simulation),
+                             "Spawn the scene in CARLA with the Settings and let it drive in real time. "
+                             "CARLA must be running the plan's map.")
+        self.btn_pause = tip(color_button(sim, "\u275a\u275a  Pause", PAUSE_AMBER, self.toggle_pause),
+                             "Freeze the simulation / let it continue.")
+        self.btn_stop = tip(color_button(sim, "\u25a0  Stop", STOP_GREY, self.stop_simulation),
+                            "End the simulation: vehicles and LiDARs removed, CARLA back to normal.")
+        self.btn_record = tip(color_button(sim, "\u25cf  Record", REC_RED, self.toggle_record, width=17),
+                              "Mount the LiDARs and save the sweeps and ground truth while it drives (Settings > "
+                              "Recording); the simulation runs slower meanwhile. Press again to stop; the recording "
+                              "is then processed up to the BEV.")
+        for button in (self.btn_start, self.btn_pause, self.btn_stop, self.btn_record):
+            button.pack(side="left", padx=(0, 6))
+        self.sim_text = tk.StringVar()
+        ttk.Label(sim, textvariable=self.sim_text, style="Sim.TLabel").pack(side="left", padx=12)
+
         status = ttk.Frame(root, padding=(8, 3))
         status.pack(side="bottom", fill="x")
         ttk.Label(status, textvariable=self.status).pack(side="left")
@@ -193,10 +261,11 @@ class EditorApp:
         body.add(self.view, weight=4)
         side = ttk.Notebook(body, width=380)
         body.add(side, weight=0)
-        side.add(self._build_vehicles_tab(side), text="Vehicles")
-        side.add(self._build_rules_tab(side), text="Rules")
-        side.add(self._build_carla_tab(side), text="CARLA")
-        side.add(self._build_record_tab(side), text="Export / Record")
+        side.add(self._build_vehicles_tab(side), text="  Scene  ")
+        side.add(self._build_settings_tab(side), text="  Settings  ")
+        self.bev_tab = self._build_bev_tab(side)
+        side.add(self.bev_tab, text="  BEV  ")
+        self.side = side
 
         v = self.view
         v.bind("<ButtonPress-1>", self._on_press)
@@ -211,10 +280,15 @@ class EditorApp:
                           ("2", lambda: self.add_role.set("traffic")), ("r", self.toggle_role),
                           ("f", self.fit_vehicles), ("t", self.toggle_route_mode),
                           ("<Return>", lambda: self.set_route_mode(False)),
-                          ("<BackSpace>", self.remove_route_point)):
+                          ("<BackSpace>", self.remove_route_point), ("<space>", self.toggle_pause)):
             root.bind(seq, lambda e, f=func: None if isinstance(e.widget, (tk.Entry, ttk.Entry, ttk.Spinbox))
                       else f())
         root.protocol("WM_DELETE_WINDOW", self.quit)
+        # mouse wheel over a scrolling tab scrolls it; it no longer changes spin boxes and lists by accident
+        for cls in ("TSpinbox", "TCombobox"):
+            root.unbind_class(cls, "<MouseWheel>")
+        root.bind_all("<MouseWheel>", self._on_wheel_anywhere, add="+")
+        self._update_sim_bar()
 
     def _build_menu(self):
         menu = tk.Menu(self.root)
@@ -224,6 +298,7 @@ class EditorApp:
         file_menu.add_command(label="Save plan", accelerator="Ctrl+S", command=self.save_plan)
         file_menu.add_command(label="Save plan as...", command=lambda: self.save_plan(ask=True))
         file_menu.add_separator()
+        file_menu.add_command(label="Export experiment (.yaml)", command=self.export_experiment)
         file_menu.add_command(label="Import OpenSCENARIO (.xosc)...", command=self.import_xosc)
         file_menu.add_command(label="Export OpenSCENARIO (.xosc)...", command=self.export_xosc)
         file_menu.add_separator()
@@ -231,6 +306,17 @@ class EditorApp:
         file_menu.add_separator()
         file_menu.add_command(label="Quit", command=self.quit)
         menu.add_cascade(label="File", menu=file_menu)
+        carla = tk.Menu(menu, tearoff=False)
+        carla.add_command(label="Check connection", command=self.check_carla)
+        carla.add_command(label=CARLA_ACTIONS[0], command=self.preview)
+        carla.add_command(label=CARLA_ACTIONS[1], command=self.test_spawn)
+        carla.add_separator()
+        carla.add_command(label=CARLA_ACTIONS[2], command=self.record_in_console)
+        carla.add_separator()
+        carla.add_command(label=CARLA_ACTIONS[3], command=self.capture_aerial)
+        carla.add_command(label=STARTUP_MAP, command=self.set_startup_map)
+        menu.add_cascade(label="CARLA", menu=carla)
+        self._carla_menu = carla
         help_menu = tk.Menu(menu, tearoff=False)
         help_menu.add_command(label="Controls", command=self.show_help)
         menu.add_cascade(label="Help", menu=help_menu)
@@ -239,17 +325,45 @@ class EditorApp:
     def _section(self, parent, text):
         ttk.Label(parent, text=text, style="Title.TLabel").pack(anchor="w", pady=(10, 4))
 
+    @staticmethod
+    def _hint(parent, text):
+        ttk.Label(parent, style="Hint.TLabel", wraplength=330, justify="left", text=text).pack(anchor="w", pady=(2, 4))
+
+    @staticmethod
+    def _form(form, rows):
+        """Label + widget per row; a third item is a tooltip shown on both."""
+        for r, row in enumerate(rows):
+            label = ttk.Label(form, text=row[0])
+            label.grid(row=r, column=0, sticky="w", pady=2)
+            row[1].grid(row=r, column=1, sticky="w", padx=8, pady=2)
+            if len(row) > 2:
+                tip(label, row[2])
+                tip(row[1], row[2])
+
+    def _scrollable(self, parent):
+        """(tab, content frame): a tab whose content scrolls vertically when it is taller than the window."""
+        outer, inner, canvas = scrolling_frame(parent)
+        self._scroll_areas.append((outer, canvas))
+        return outer, inner
+
+    def _on_wheel_anywhere(self, event):
+        widget = self.root.winfo_containing(event.x_root, event.y_root)
+        path = str(widget) if widget is not None else ""
+        for outer, canvas in self._scroll_areas:
+            name = str(outer)
+            if (path == name or path.startswith(name + ".")) and canvas.yview() != (0.0, 1.0):
+                canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
+                return
+
     def _build_vehicles_tab(self, parent):
         tab = ttk.Frame(parent, padding=10)
-        self._section(tab, "Click on a road to add a")
         row = ttk.Frame(tab)
         row.pack(fill="x")
-        ttk.Radiobutton(row, text="CAV (blue, has a LiDAR)   [1]", value="cav",
-                        variable=self.add_role).pack(anchor="w")
-        ttk.Radiobutton(row, text="Traffic vehicle (orange)   [2]", value="traffic",
-                        variable=self.add_role).pack(anchor="w")
+        ttk.Label(row, text="Add", style="Title.TLabel").pack(side="left", padx=(0, 8))
+        ttk.Radiobutton(row, text="CAV (LiDAR)  [1]", value="cav", variable=self.add_role).pack(side="left")
+        ttk.Radiobutton(row, text="Traffic  [2]", value="traffic", variable=self.add_role).pack(side="left", padx=8)
         self.count_label = ttk.Label(tab, font=("Segoe UI", 10, "bold"))
-        self.count_label.pack(anchor="w", pady=(10, 4))
+        self.count_label.pack(anchor="w", pady=(8, 4))
         frame = ttk.Frame(tab)
         frame.pack(fill="both", expand=True)
         cols = ("name", "x", "y", "yaw", "lane", "drive")
@@ -270,10 +384,8 @@ class EditorApp:
                                                                                   fill="x", padx=4)
         ttk.Button(buttons, text="Clear all", command=self.clear_all).pack(side="left", expand=True, fill="x")
         self._build_driving_box(tab)
-        ttk.Label(tab, style="Hint.TLabel", wraplength=340, justify="left", text=(
-            "Left click: add or select   |   drag: move along the roads\n"
-            "Wheel: zoom   |   right drag: pan   |   Ctrl+Z / Ctrl+Y: undo / redo\n"
-            "Vehicles always snap to the nearest driving lane and face its direction.")).pack(anchor="w", pady=6)
+        ttk.Label(tab, style="Hint.TLabel", justify="left", text=(
+            "Click a road: add  |  drag: move  |  right drag: pan")).pack(anchor="w", pady=6)
         return tab
 
     def _build_driving_box(self, tab):
@@ -311,89 +423,215 @@ class EditorApp:
         self._driving_widgets = [self.chk_speed, self.spin_speed, self.btn_route, self.btn_route_back,
                                  self.btn_route_clear] + self.end_radios
 
-    def _build_rules_tab(self, parent):
-        tab = ttk.Frame(parent, padding=10)
-        self._section(tab, "Spawn area")
-        ttk.Checkbutton(tab, text="Only allow vehicles inside this box", variable=self.use_bbox,
-                        command=self.redraw).pack(anchor="w")
-        grid = ttk.Frame(tab)
-        grid.pack(anchor="w", pady=4)
-        for i, label in enumerate(("x min", "x max", "y min", "y max")):
-            ttk.Label(grid, text=label).grid(row=i // 2, column=(i % 2) * 2, sticky="e", padx=(0, 4), pady=2)
-            entry = ttk.Entry(grid, textvariable=self.bbox_vars[i], width=9)
-            entry.grid(row=i // 2, column=(i % 2) * 2 + 1, padx=(0, 12), pady=2)
-            entry.bind("<FocusOut>", lambda e: self.redraw())
-            entry.bind("<Return>", lambda e: self.redraw())
-        ttk.Button(tab, text="Use the paper's box (Table 1)", command=self._paper_bbox).pack(anchor="w", pady=2)
-        ttk.Label(tab, style="Hint.TLabel", wraplength=340, justify="left", text=(
-            "Paper: x in [-100, 100], y in [-200, 200] (Town03, world coordinates). "
-            "Exported with the experiment as scenario.spawn_bbox.")).pack(anchor="w")
-        self._section(tab, "Placement")
-        ttk.Checkbutton(tab, text="Allow vehicles inside junctions", variable=self.allow_junction).pack(anchor="w")
-        row = ttk.Frame(tab)
-        row.pack(anchor="w", pady=4)
-        ttk.Label(row, text="Max distance to a lane (m)").pack(side="left")
-        ttk.Spinbox(row, from_=1, to=20, increment=1, width=5, textvariable=self.snap_distance).pack(
-            side="left", padx=6)
-        ttk.Label(tab, style="Hint.TLabel", wraplength=340, justify="left", text=(
-            "Two vehicles may not overlap (4.8 x 2.1 m footprint + 0.6 m gap). "
-            "Vehicles on different levels (bridges) are allowed to cross.")).pack(anchor="w", pady=4)
-        return tab
-
-    def _build_carla_tab(self, parent):
-        tab = ttk.Frame(parent, padding=10)
-        self._section(tab, "Simulator")
-        self.carla_info = ttk.Label(tab, wraplength=340, justify="left")
-        self.carla_info.pack(anchor="w")
-        ttk.Button(tab, text="Check connection", command=self.check_carla).pack(fill="x", pady=(6, 2))
-        self._section(tab, "Check the plan")
-        self.btn_preview = ttk.Button(tab, text="Show the plan in the CARLA window", command=self.preview)
-        self.btn_preview.pack(fill="x", pady=2)
-        self.btn_test = ttk.Button(tab, text="Test spawn (spawn, check, remove)", command=self.test_spawn)
-        self.btn_test.pack(fill="x", pady=2)
-        self._section(tab, "Aerial photo")
-        self.btn_aerial = ttk.Button(tab, text="Take aerial photo of this map", command=self.capture_aerial)
-        self.btn_aerial.pack(fill="x", pady=2)
-        self.aerial_progress = ttk.Progressbar(tab, mode="determinate")
-        self.aerial_progress.pack(fill="x", pady=2)
-        ttk.Label(tab, style="Hint.TLabel", wraplength=340, justify="left", text=(
-            "Needs this map loaded in CARLA. Saved in data/maps/, so it is taken only once.")).pack(anchor="w")
-        self._section(tab, "Switch CARLA to another map")
-        self.btn_startup = ttk.Button(tab, text="Start CARLA on this map next time", command=self.set_startup_map)
-        self.btn_startup.pack(fill="x", pady=2)
-        ttk.Label(tab, style="Hint.TLabel", wraplength=340, justify="left", text=(
-            "Writes the map into CARLA's DefaultEngine.ini (backup kept). Close and reopen CARLA "
-            "afterwards. Safer than load_world(), which crashed CARLA on a 4 GB GPU.")).pack(anchor="w")
-        return tab
-
-    def _build_record_tab(self, parent):
-        tab = ttk.Frame(parent, padding=10)
+    def _build_settings_tab(self, parent):
+        outer, tab = self._scrollable(parent)
+        sim, sc = self.cfg.simulation, self.cfg.scenario
         self.exp_name = tk.StringVar(value="my_scenario")
         self.extra_traffic = tk.IntVar(value=0)
         self.exp_autopilot = tk.BooleanVar(value=True)
-        self.exp_frames = tk.IntVar(value=10)
+        self.exp_frames = tk.IntVar(value=0)
         self.exp_every = tk.IntVar(value=20)
-        self._section(tab, "Experiment")
-        form = ttk.Frame(tab)
+        self.lidar_vars = {key: tk.StringVar() for key in export.LIDAR_KEYS}
+        self._default_lidar()
+        self.seed_var = tk.StringVar(value=str(sim.seed))
+        self.lights_vars = [tk.StringVar(value="{:g}".format(v)) for v in sc.ignore_lights_range]
+        self.process_after = tk.BooleanVar(value=True)
+        keep = self._setting_widgets.append
+
+        def box(title):
+            frame = ttk.LabelFrame(tab, text=title, padding=(10, 6))
+            frame.pack(fill="x", pady=(0, 10))
+            return frame
+
+        def spin(parent, var, low, high, step, width=8):
+            widget = ttk.Spinbox(parent, from_=low, to=high, increment=step, width=width, textvariable=var)
+            keep(widget)
+            return widget
+
+        def combo(parent, var, values, width=10):
+            widget = ttk.Combobox(parent, textvariable=var, values=values, width=width)
+            keep(widget)
+            return widget
+
+        def check(parent, text, var, tooltip, command=None):
+            widget = tip(ttk.Checkbutton(parent, text=text, variable=var, command=command), tooltip)
+            widget.pack(anchor="w", pady=1)
+            keep(widget)
+            return widget
+
+        ttk.Label(tab, style="Hint.TLabel", text="Hover a setting to see what it does.").pack(anchor="w",
+                                                                                           pady=(0, 6))
+        rules = box("Placement")
+        check(rules, "Only inside the spawn area", self.use_bbox,
+              "Vehicles may only be placed inside this world area (yellow box). Default on Town03: the paper's "
+              "area, x -100..100, y -200..200.", self.redraw)
+        grid = ttk.Frame(rules)
+        grid.pack(anchor="w", pady=2)
+        for i, label in enumerate(("x min", "x max", "y min", "y max")):
+            ttk.Label(grid, text=label).grid(row=i // 2, column=(i % 2) * 2, sticky="e", padx=(0, 4), pady=2)
+            entry = ttk.Entry(grid, textvariable=self.bbox_vars[i], width=8)
+            entry.grid(row=i // 2, column=(i % 2) * 2 + 1, padx=(0, 12), pady=2)
+            entry.bind("<FocusOut>", lambda e: self.redraw())
+            entry.bind("<Return>", lambda e: self.redraw())
+            keep(entry)
+        keep(tip(ttk.Button(rules, text="Paper's area", command=self._paper_bbox),
+                 "x -100..100, y -200..200 (paper, Table 1)."))
+        self._setting_widgets[-1].pack(anchor="w", pady=(0, 4))
+        check(rules, "Vehicles in junctions", self.allow_junction,
+              "Off: a vehicle can only be placed on the legs, not inside a junction.")
+        form = ttk.Frame(rules)
         form.pack(fill="x")
-        rows = (("Name", ttk.Entry(form, textvariable=self.exp_name, width=22)),
-                ("Extra random traffic", ttk.Spinbox(form, from_=0, to=100, width=6, textvariable=self.extra_traffic)),
-                ("Frames to save", ttk.Spinbox(form, from_=1, to=10000, width=6, textvariable=self.exp_frames)),
-                ("Save every N ticks", ttk.Spinbox(form, from_=1, to=1000, width=6, textvariable=self.exp_every)))
-        for r, (label, widget) in enumerate(rows):
-            ttk.Label(form, text=label).grid(row=r, column=0, sticky="w", pady=3)
-            widget.grid(row=r, column=1, sticky="w", padx=8, pady=3)
-        ttk.Checkbutton(tab, text="Vehicles drive (autopilot)", variable=self.exp_autopilot).pack(anchor="w",
-                                                                                                  pady=4)
-        ttk.Label(tab, style="Hint.TLabel", wraplength=340, justify="left", text=(
-            "Extra traffic is spawned at random CARLA spawn points (inside the spawn area if it is "
-            "enabled). 20 ticks = 1 simulated second.")).pack(anchor="w")
-        ttk.Button(tab, text="Export experiment", command=lambda: self.export(False)).pack(fill="x", pady=(12, 2))
-        ttk.Button(tab, text="Export and record now", style="Accent.TButton",
-                   command=lambda: self.export(True)).pack(fill="x", pady=2)
-        self.export_info = ttk.Label(tab, wraplength=340, justify="left")
-        self.export_info.pack(anchor="w", pady=8)
-        return tab
+        self._form(form, (("Max distance to a lane (m)", spin(form, self.snap_distance, 1, 20, 1, 6),
+                           "A click farther than this from a driving lane is refused."),))
+
+        lidar = box("LiDAR (every CAV)")
+        form = ttk.Frame(lidar)
+        form.pack(fill="x")
+        v = self.lidar_vars
+        self._form(form, (
+            ("Channels", combo(form, v["channels"], ("16", "32", "64")),
+             "Laser rings, spread from +2 to -25 degrees. Paper: 32."),
+            ("Range (m)", spin(form, v["range"], 10, 300, 10),
+             "Farthest distance measured. Paper: 120 m."),
+            ("Points per second", combo(form, v["points_per_second"], ("500000", "1000000", "2000000")),
+             "Rays per second over all channels; one sweep (1/20 s) gets 1/20 of them. Paper: 1 000 000."),
+            ("Mount height (m)", spin(form, v["mount_z"], 1.0, 4.0, 0.1),
+             "Height of the LiDAR above the ground. Below about 2 m it also sees its own roof (the ego mask "
+             "removes those points); 1.48 m or lower is inside a Tesla Model 3. Ours: 2.4 m."),
+            ("Noise (m)", spin(form, v["noise_stddev"], 0.0, 0.5, 0.01),
+             "Random error added to every range (standard deviation). 0 = perfect.")))
+        keep(tip(ttk.Button(lidar, text="Paper values", command=self._default_lidar),
+                 "Back to 32 channels, 120 m, 1 000 000 points/s, 2.4 m, no noise."))
+        self._setting_widgets[-1].pack(anchor="w", pady=(4, 0))
+
+        traffic = box("Traffic")
+        check(traffic, "Vehicles drive (autopilot)", self.exp_autopilot,
+              "Off: vehicles without a route or a speed stay parked (with the brakes on).")
+        form = ttk.Frame(traffic)
+        form.pack(fill="x")
+        lights = ttk.Frame(form)
+        spin(lights, self.lights_vars[0], 0, 100, 10, 5).pack(side="left")
+        ttk.Label(lights, text=" to ").pack(side="left")
+        spin(lights, self.lights_vars[1], 0, 100, 10, 5).pack(side="left")
+        ttk.Label(lights, text=" %").pack(side="left")
+        self._form(form, (
+            ("Extra random traffic", spin(form, self.extra_traffic, 0, 100, 1),
+             "Vehicles added at random CARLA spawn points (inside the spawn area if it is on), on top of yours."),
+            ("Seed", spin(form, self.seed_var, 0, 999999, 1),
+             "Chooses the random extra traffic, the vehicle models and the Traffic Manager's draws. Same seed "
+             "and a parked scene give the same recording."),
+            ("Red lights ignored", lights,
+             "Each Traffic Manager vehicle draws its chance of running a red light in this range. Paper: "
+             "0-100 %. Vehicles with a route always stop.")))
+        note = tip(ttk.Label(traffic, style="Hint.TLabel", text="Time step: 0.05 s (fixed)"),
+                   "One tick = 1 / 20 Hz, so every tick is one full 360-degree LiDAR sweep. Another value would "
+                   "give partial sweeps.")
+        note.pack(anchor="w", pady=(4, 0))
+
+        rec = box("Recording")
+        form = ttk.Frame(rec)
+        form.pack(fill="x")
+        name = ttk.Entry(form, textvariable=self.exp_name, width=20)
+        keep(name)
+        self._form(form, (
+            ("Name", name, "Run folder data/runs/<date>_<time>_<name>, and the name of the exported plan."),
+            ("Save every N ticks", spin(form, self.exp_every, 1, 1000, 1),
+             "20 ticks = 1 simulated second, so 20 saves one frame per second."),
+            ("Frames (0 = until you stop)", spin(form, self.exp_frames, 0, 10000, 1),
+             "A recording ends by itself after this many frames; 0 = when you press Record again.")))
+        check(rec, "Process up to the BEV when it ends", self.process_after,
+              "Every frame: ego mask, drivable-road filter, ground removal, BEV, sectors and metadata. "
+              "The BEV tab then shows it on the map.")
+        return outer
+
+    def _default_lidar(self):
+        li = self.cfg.lidar
+        for key in export.LIDAR_KEYS:
+            value = getattr(li, key)
+            self.lidar_vars[key].set(str(int(value)) if key in ("channels", "points_per_second")
+                                     else "{:g}".format(value))
+
+    def _build_bev_tab(self, parent):
+        outer, tab = self._scrollable(parent)
+        self._section(tab, "Recordings")
+        row = ttk.Frame(tab)
+        row.pack(fill="x")
+        self.run_box = ttk.Combobox(row, state="readonly", width=38)
+        self.run_box.pack(side="left", fill="x", expand=True)
+        self.run_box.bind("<<ComboboxSelected>>", lambda e: self._on_run_chosen())
+        ttk.Button(row, text="Refresh", command=self.refresh_runs).pack(side="left", padx=(4, 0))
+        row = ttk.Frame(tab)
+        row.pack(fill="x", pady=(6, 0))
+        ttk.Label(row, text="Frame").pack(side="left")
+        self.frame_box = ttk.Combobox(row, state="readonly", width=14)
+        self.frame_box.pack(side="left", padx=6)
+        self.frame_box.bind("<<ComboboxSelected>>", lambda e: self._on_frame_chosen())
+        row = ttk.Frame(tab)
+        row.pack(fill="x", pady=6)
+        process_tip = ("Ego mask, drivable-road filter, ground removal, BEV (0.5 m cells, +-60 m), 4 sectors and "
+                       "their metadata. About 0.1 s per CAV and frame; no CARLA needed.")
+        self.btn_process = tip(ttk.Button(row, text="Process this frame", command=lambda: self.process_run(False)),
+                               process_tip)
+        self.btn_process.pack(side="left", expand=True, fill="x")
+        self.btn_process_all = tip(ttk.Button(row, text="Process all frames",
+                                              command=lambda: self.process_run(True)), process_tip)
+        self.btn_process_all.pack(side="left", expand=True, fill="x", padx=(4, 0))
+
+        self._section(tab, "On the map")
+        tip(ttk.Checkbutton(tab, text="BEV of every CAV", variable=self.show_bev, command=self._on_show_bev),
+            "Each coloured square = an occupied 0.5 m cell of one CAV (at least one non-ground return), placed "
+            "with the CAV's recorded pose; the dot is the LiDAR. Empty = no return, not free.").pack(anchor="w")
+        tip(ttk.Checkbutton(tab, text="Recorded vehicles", variable=self.show_truth, command=self.redraw),
+            "Ground-truth boxes of that frame (grey outlines).").pack(anchor="w")
+        self.bev_legend = ttk.Frame(tab)
+        self.bev_legend.pack(fill="x", pady=4)
+
+        self._section(tab, "One CAV, stage by stage")
+        row = ttk.Frame(tab)
+        row.pack(fill="x")
+        ttk.Label(row, text="CAV").pack(side="left")
+        self.cav_box = ttk.Combobox(row, state="readonly", width=8)
+        self.cav_box.pack(side="left", padx=6)
+        self.btn_figure = tip(ttk.Button(row, text="Open figure", command=self.open_figure),
+                              "Raw sweep, drivable road, ground removed, BEV with the 4 sectors and their size and "
+                              "quality. Saved as processed/<frame>/<cav>_pipeline.png.")
+        self.btn_figure.pack(side="left", fill="x", expand=True)
+        self._section(tab, "All CAVs, before and after filtering")
+        grid = ttk.Frame(tab)
+        grid.pack(fill="x")
+        grid.columnconfigure(0, weight=1)
+        grid.columnconfigure(1, weight=1)
+        views = (("world_raw", "Raw, all CAVs",
+                  "The raw point clouds of every CAV superposed in the world frame, one colour per CAV; grey "
+                  "rectangles = CARLA's ground-truth boxes (drawn for every car, seen or not)."),
+                 ("world_filtered", "After filtering",
+                  "The points left after ego mask, road filter and ground removal, every CAV in the world frame. "
+                  "A box is solid when a CAV has >= 10 points on that car, dashed when no CAV does."),
+                 ("world_bev", "BEV, all CAVs",
+                  "The BEV of all CAVs together: non-ground points per 0.5 m cell, with a zoom on the car with the "
+                  "most points."),
+                 ("vehicles", "Points per car",
+                  "For each car: points on its body before -> after filtering (all CAVs together), and which CAVs "
+                  "see it."))
+        self.view_buttons = []
+        for n, (which, text, tooltip) in enumerate(views):
+            button = tip(ttk.Button(grid, text=text, command=lambda w=which: self.open_view(w)), tooltip)
+            button.grid(row=n // 2, column=n % 2, sticky="ew", padx=(0 if n % 2 == 0 else 4, 0), pady=2)
+            self.view_buttons.append(button)
+        row = ttk.Frame(tab)
+        row.pack(fill="x", pady=(2, 0))
+        ttk.Label(row, text="CAV").pack(side="left")
+        self.cav_view_box = ttk.Combobox(row, state="readonly", width=8)
+        self.cav_view_box.pack(side="left", padx=6)
+        button = tip(ttk.Button(row, text="This CAV: before / after",
+                                command=lambda: self.open_view("cav", self.cav_view_box.get())),
+                     "One CAV in its own frame: raw sweep | after filtering | BEV (points per cell).")
+        button.pack(side="left", fill="x", expand=True)
+        self.view_buttons.append(button)
+        self._hint(tab, "Each opens on its own; vehicles.csv and cavs.csv (the numbers) are written next to them.")
+        self.bev_info = ttk.Label(tab, wraplength=330, justify="left")
+        self.bev_info.pack(anchor="w", pady=8)
+        return outer
 
     # ================================================================== maps
     def _find_maps(self):
@@ -417,6 +655,9 @@ class EditorApp:
         self.open_map(self.plan.town)
 
     def _on_map_chosen(self):
+        if self._locked():
+            self._show_map_in_box()
+            return
         info = self.maps[self.map_box.current()]
         if info.name == self.plan.town:
             return
@@ -513,17 +754,25 @@ class EditorApp:
             view.create_rectangle(x0, y0, x1, y1, outline="#e2b93b", dash=(8, 5), width=2)
             view.create_text(x0 + 6, y0 + 6, text="spawn area", anchor="nw", fill="#e2b93b", font=FONT)
         outside = set(self.plan.outside(box))
+        live = self._live if self.sim is not None and self._live is not None else None
+        bev = self.bev if self.show_bev.get() and self.bev is not None and self.bev.town == self.plan.town else None
+        if bev is not None:
+            self._draw_bev(view, bev)
+        ghost = bev is not None or live is not None
         for i, v in enumerate(self.plan.vehicles):
-            if v.route:
+            if v.route and not ghost:
                 self._draw_route(view, i, v)
         for i, v in enumerate(self.plan.vehicles):
-            self._draw_vehicle(view, v.pose, COLORS[v.role], self.plan.name(i), i == self.selected, i in outside)
-        if self._ghost is not None:
+            self._draw_vehicle(view, v.pose, COLORS[v.role], self.plan.name(i), i == self.selected, i in outside,
+                               ghost=ghost)
+        if live is not None:
+            self._draw_live(view, live)
+        if self._ghost is not None and live is None:
             pose, ok = self._ghost
             pts = [view.world_to_screen(x, y) for x, y in footprint(pose)]
             view.create_polygon(*[c for p in pts for c in p], outline=OK_GHOST if ok else BAD_GHOST,
                                 fill="", dash=(4, 3), width=2)
-        if self._route_ghost is not None:  # where a route click lands, and the lane's direction
+        if self._route_ghost is not None and live is None:  # where a route click lands, and the lane's direction
             x, y, yaw = self._route_ghost
             sx, sy = view.world_to_screen(x, y)
             ex, ey = view.world_to_screen(x + 4 * math.cos(math.radians(yaw)), y + 4 * math.sin(math.radians(yaw)))
@@ -535,9 +784,50 @@ class EditorApp:
         view.create_line(16, h - 18, 16 + metres * view.scale, h - 18, fill="white", width=3)
         view.create_text(16, h - 24, text="{} m".format(metres), anchor="sw", fill="white", font=FONT)
 
-    def _draw_vehicle(self, view, pose, color, label, selected, outside):
+    def _draw_live(self, view, live):
+        """Every vehicle of the running simulation at its current pose, with its real box and speed."""
+        for v in live.vehicles:
+            corners = box_corners_2d(v.pose, v.extent, v.center_offset)
+            pts = [view.world_to_screen(x, y) for x, y in corners]
+            color = COLORS[Role.parse(v.role)]
+            view.create_polygon(*[c for p in pts for c in p], fill=color, outline="white", width=1)
+            view.create_line(*pts[0], *pts[1], fill="white", width=3)   # front bumper
+            # CAVs are always named; traffic only when zoomed in enough for the labels not to overlap
+            if view.scale >= (1.5 if v.role == Role.CAV.value else LIVE_TRAFFIC_LABELS):
+                cx = sum(p[0] for p in pts) / 4.0
+                cy = min(p[1] for p in pts) - 9
+                text = "{}  {:.0f} km/h".format(v.name, v.speed_kmh)
+                view.create_text(cx + 1, cy + 1, text=text, fill="black", font=("Segoe UI", 8, "bold"))
+                view.create_text(cx, cy, text=text, fill="white", font=("Segoe UI", 8, "bold"))
+
+    def _draw_bev(self, view, bev):
+        """Recorded vehicles (outlines) and every CAV's occupied BEV cells, world frame."""
+        w2, h2, s = view.winfo_width() / 2.0, view.winfo_height() / 2.0, view.scale
+
+        def screen(xy):
+            out = np.empty_like(xy)
+            out[..., 0] = w2 + (xy[..., 0] - view.cx) * s
+            out[..., 1] = h2 + (xy[..., 1] - view.cy) * s
+            return out
+
+        if self.show_truth.get():
+            for _, _, corners in bev.vehicles:
+                view.create_polygon(*screen(np.asarray(corners)).ravel().tolist(), fill="", outline=TRUTH_OUTLINE)
+        for i, cav in enumerate(bev.cavs):
+            color = BEV_COLORS[i % len(BEV_COLORS)]
+            if len(cav.cells):
+                for poly in screen(cav.cells).reshape(len(cav.cells), 8).tolist():
+                    view.create_polygon(*poly, fill=color, outline="")
+            sx, sy = screen(np.array([cav.sensor_pose["x"], cav.sensor_pose["y"]]))
+            view.create_oval(sx - 5, sy - 5, sx + 5, sy + 5, fill=color, outline="white", width=2)
+            view.create_text(sx + 8, sy - 6, text=cav.name, anchor="sw", fill=color, font=("Segoe UI", 9, "bold"))
+
+    def _draw_vehicle(self, view, pose, color, label, selected, outside, ghost=False):
         pts = [view.world_to_screen(x, y) for x, y in footprint(pose)]
         flat = [c for p in pts for c in p]
+        if ghost:  # the plan while the BEV is shown
+            view.create_polygon(*flat, fill="", outline=color, dash=(3, 2), width=2 if selected else 1)
+            return
         view.create_polygon(*flat, fill=color, outline=SELECTED if selected else "white",
                             width=3 if selected else 1)
         # windscreen line near the front, so the heading is visible at any zoom
@@ -620,6 +910,8 @@ class EditorApp:
         return PlannedVehicle(role, lane.pose, lane.road_id, lane.lane_id, lane.in_junction)
 
     def _on_press(self, event):
+        if self._locked():
+            return
         self.view.focus_set()
         if self.route_mode.get() and self.selected is not None:
             self._add_route_point(event.x, event.y)
@@ -672,6 +964,8 @@ class EditorApp:
         if self.road_map:
             text += "   z {:.1f}".format(self.road_map.road_height(x, y))
         self.cursor.set(text + "   |   {:.2f} px/m".format(self.view.scale))
+        if self.sim is not None:
+            return
         if self.route_mode.get() and self.selected is not None:
             self.view.configure(cursor="crosshair")
             lane = self.road_map.snap(x, y, float(self.snap_distance.get())) if self.road_map else None
@@ -720,6 +1014,8 @@ class EditorApp:
         self.redraw()
 
     def toggle_role(self):
+        if self._locked():
+            return
         if self.selected is None:
             return
         v = self.plan.vehicles[self.selected]
@@ -728,6 +1024,8 @@ class EditorApp:
         self.refresh()
 
     def delete_selected(self):
+        if self._locked():
+            return
         if self.selected is None:
             return
         name = self.plan.name(self.selected)
@@ -738,6 +1036,8 @@ class EditorApp:
         self.refresh()
 
     def clear_all(self):
+        if self._locked():
+            return
         if self.plan.vehicles and messagebox.askyesno("Clear all", "Remove every vehicle? (Ctrl+Z undoes it)"):
             self.plan.clear()
             self.selected = None
@@ -745,12 +1045,16 @@ class EditorApp:
             self.refresh()
 
     def undo(self):
+        if self._locked():
+            return
         if self.plan.undo():
             self.dirty = True
             self.selected = None
             self.refresh()
 
     def redo(self):
+        if self._locked():
+            return
         if self.plan.redo():
             self.dirty = True
             self.selected = None
@@ -825,6 +1129,8 @@ class EditorApp:
                 "(Export tab), else it stays parked. Press T to draw a route.").format(name)
 
     def _apply_speed(self):
+        if self._locked():
+            return
         index = self.selected
         if index is None:
             return
@@ -843,6 +1149,8 @@ class EditorApp:
         self.refresh()
 
     def _apply_route_end(self):
+        if self._locked():
+            return
         index = self.selected
         if index is None:
             return
@@ -863,9 +1171,14 @@ class EditorApp:
                 self.plan.name(self.selected)))
 
     def toggle_route_mode(self):
+        if self._locked():
+            return
         self.set_route_mode(not self.route_mode.get())
 
     def _on_route_button(self):
+        if self._locked():
+            self.route_mode.set(False)
+            return
         self.set_route_mode(self.route_mode.get())
 
     def escape(self):
@@ -895,6 +1208,8 @@ class EditorApp:
         self.refresh()
 
     def remove_route_point(self):
+        if self._locked():
+            return
         index = self.selected
         if index is None or not self.plan.vehicles[index].route:
             return
@@ -903,6 +1218,8 @@ class EditorApp:
         self.refresh()
 
     def clear_route(self):
+        if self._locked():
+            return
         index = self.selected
         if index is None or not self.plan.vehicles[index].route:
             return
@@ -922,12 +1239,16 @@ class EditorApp:
         return self.save_plan() if answer else True
 
     def new_plan(self):
+        if self._locked():
+            return
         if self._confirm_discard():
             self.plan = ScenarioPlan(self.plan.town)
             self.plan_path, self.selected, self.dirty = None, None, False
             self.refresh()
 
     def ask_open_plan(self):
+        if self._locked():
+            return
         if not self._confirm_discard():
             return
         path = filedialog.askopenfilename(title="Open spawn plan", filetypes=[("Spawn plan", "*.json")],
@@ -969,6 +1290,8 @@ class EditorApp:
 
     def import_xosc(self):
         """Open an OpenSCENARIO file (e.g. from CARLA's QGIS Traffic Generation Editor) as a plan."""
+        if self._locked():
+            return
         from ..backend.interop.openscenario import read_xosc
         from .openscenario_bridge import plan_from_xosc
 
@@ -1012,49 +1335,405 @@ class EditorApp:
             self.status.set("Exported {} (CAVs as Ego_1..., traffic as Vehicle_1...).{}".format(path, note))
 
     def quit(self):
+        if self.sim is not None:
+            if not messagebox.askyesno("Quit", "The simulation is running. Stop it and quit?"):
+                return
+            self.sim.stop()
+            self.sim.join(60)
         if self._confirm_discard():
             self.root.destroy()
 
     # ================================================================== export / record
-    def export(self, record):
+    def _export_files(self):
+        """Write the plan and its experiment from the window's settings: (options, plan, yaml) or None."""
         try:
+            v = self.lidar_vars
+            lidar = {"channels": _number(v["channels"], "Channels", int),
+                     "range": _number(v["range"], "Range"),
+                     "points_per_second": _number(v["points_per_second"], "Points per second", int),
+                     "mount_z": _number(v["mount_z"], "Mount height"),
+                     "noise_stddev": _number(v["noise_stddev"], "Noise")}
+            frames = _number(self.exp_frames, "Frames", int)
+            if frames < 0:
+                raise ValueError("Frames: 0 or more")
             options = export.ExportOptions(
-                name=self.exp_name.get(), extra_traffic=int(self.extra_traffic.get()),
-                autopilot=self.exp_autopilot.get(), num_frames=int(self.exp_frames.get()),
-                save_every=int(self.exp_every.get()), spawn_bbox=self.bbox())
+                name=self.exp_name.get(), extra_traffic=_number(self.extra_traffic, "Extra random traffic", int),
+                autopilot=self.exp_autopilot.get(), num_frames=frames or 10,
+                save_every=_number(self.exp_every, "Save every N ticks", int), spawn_bbox=self.bbox(),
+                lidar=lidar, seed=_number(self.seed_var, "Seed", int),
+                ignore_lights=[_number(var, "Red lights ignored") for var in self.lights_vars],
+                process=self.process_after.get())
             problems = self._route_problems()
             if problems:
                 raise ValueError("These routes cannot be driven:\n" + "\n".join(problems))
             outside = self.plan.outside(options.spawn_bbox)
             if outside:
                 raise ValueError("{} vehicles are outside the spawn area. Move them or turn the area off "
-                                 "(Rules tab).".format(len(outside)))
+                                 "(Settings).".format(len(outside)))
             plan_rel, yaml_rel = export.export(self.plan, options)
             from .. import api
             api.load_config(os.path.join(PROJECT_ROOT, yaml_rel))  # same checks as the recorder
         except (ValueError, tk.TclError) as exc:
-            messagebox.showerror("Cannot export", str(exc))
-            return
+            messagebox.showerror("Cannot use these settings", str(exc))
+            return None
         except Exception as exc:  # ConfigError and friends: show, don't crash the window
             messagebox.showerror("Invalid experiment", str(exc))
+            return None
+        return options, plan_rel, yaml_rel
+
+    def export_experiment(self):
+        out = self._export_files()
+        if out is None:
             return
+        options, plan_rel, yaml_rel = out
         name = export.safe_name(options.name)
-        text = "Saved:\n  {}\n  {}\n\nRecord later with:\n  python main.py record --config {} --name {}".format(
-            plan_rel, yaml_rel, yaml_rel.replace(os.sep, "/"), name)
-        self.export_info.configure(text=text)
         self.status.set("Exported {}".format(yaml_rel))
-        if not record:
-            return
+        messagebox.showinfo("Experiment exported", "Saved:\n  {}\n  {}\n\nRecord it with:\n  python main.py record "
+                            "--config {} --name {} --process".format(plan_rel, yaml_rel,
+                                                                    yaml_rel.replace(os.sep, "/"), name))
+
+    def _carla_ready(self):
         if self.server_town is None:
-            messagebox.showwarning("CARLA not running", "Start CARLA first, then press record again.")
-            return
+            messagebox.showwarning("CARLA not running", "Start CARLA, then CARLA > Check connection.")
+            return False
         if self.server_town != self.plan.town:
             messagebox.showwarning("Wrong map in CARLA", (
-                "CARLA has {} loaded, this plan is for {}.\n\nCARLA tab > 'Start CARLA on this map next "
-                "time', then close and reopen CARLA.").format(self.server_town, self.plan.town))
+                "CARLA has {} loaded, this plan is for {}.\n\nCARLA > 'Start CARLA on this map next time', "
+                "then close and reopen CARLA.").format(self.server_town, self.plan.town))
+            return False
+        return True
+
+    def record_in_console(self):
+        """The repeatable way: warm-up, then a fixed number of frames, in a console of its own."""
+        if self.sim is not None or not self._carla_ready():
             return
-        export.launch_recording(yaml_rel, name)
-        self.status.set("Recording started in a new window: {}".format(name))
+        out = self._export_files()
+        if out is None:
+            return
+        options, plan_rel, yaml_rel = out
+        name = export.safe_name(options.name)
+        export.launch_recording(yaml_rel, name, process=options.process)
+        now = time.time()
+        self._watch = {"name": name, "since": now, "frames": options.num_frames, "process": options.process,
+                       "state": None, "changed": now}
+        self.root.after(WATCH_EVERY_MS, self._watch_recording)
+        self.status.set("Recording {} frames in a new window: {}. The BEV tab opens when it is done.".format(
+            options.num_frames, name))
+
+    def _watch_recording(self):
+        """Follow a recording started from the editor; when it is done, show its BEV."""
+        watch = self._watch
+        if not watch:
+            return
+        run = next((r for r in results.list_runs(results.runs_dir(self.cfg))
+                    if r.name.endswith("_" + watch["name"]) and _started(r.name) >= watch["since"] - 5), None)
+        state = None if run is None else (len(run.frames), len(run.processed))
+        now = time.time()
+        if state != watch["state"]:
+            watch["state"], watch["changed"] = state, now
+        if run is not None and len(run.frames) >= watch["frames"] and (
+                not watch["process"] or run.frames[-1] in run.processed):
+            self._watch = None
+            self.refresh_runs(select=run.path, frame=run.frames[-1])
+            self.side.select(self.bev_tab)
+            if run.processed:
+                self.show_bev.set(True)
+                self._on_show_bev()
+            self.status.set("{} recorded{}.".format(run.name, ", processed: its BEV is on the map" if run.processed
+                                                    else "; process it in the BEV tab"))
+            return
+        if now - watch["changed"] > WATCH_IDLE_S:
+            self._watch = None
+            self.status.set("Nothing new from the recording '{}' for {} s: see its console window.".format(
+                watch["name"], WATCH_IDLE_S))
+            return
+        if run is not None:
+            busy = "processing" if len(run.frames) >= watch["frames"] else "recording"
+            self.status.set("{}: {} ({}/{} frames, {} processed)".format(run.name, busy, len(run.frames),
+                                                                         watch["frames"], len(run.processed)))
+        self.root.after(WATCH_EVERY_MS, self._watch_recording)
+
+    # ================================================================== live simulation
+    def _locked(self):
+        """True (and says why) while a simulation runs: the scene and the settings cannot change then."""
+        if self.sim is not None:
+            self.status.set("Stop the simulation first (Stop) to change the scene or the settings.")
+            return True
+        return False
+
+    def start_simulation(self):
+        if self.sim is not None or not self._carla_ready():
+            return
+        if self.route_mode.get():
+            self.set_route_mode(False)
+        out = self._export_files()
+        if out is None:
+            return
+        options, _, yaml_rel = out
+        from .. import api
+        cfg = api.load_config(os.path.join(PROJECT_ROOT, yaml_rel))
+        self.sim = simulation.LiveSimulation(cfg, results.runs_dir(self.cfg), max_frames=int(self.exp_frames.get()))
+        self._live = None
+        self.sim.start()
+        self._set_editing(False)
+        self.status.set("Starting: spawning {} vehicles...".format(cfg.scenario.num_cavs + cfg.scenario.num_traffic))
+
+    def toggle_pause(self):
+        if self.sim is None or self._live is None:
+            return
+        if self._live.state == simulation.PAUSED:
+            self.sim.resume()
+        elif self._live.state == simulation.RUNNING:
+            self.sim.pause()
+
+    def stop_simulation(self):
+        if self.sim is not None:
+            self.sim.stop()
+            self.status.set("Stopping: removing the vehicles and LiDARs...")
+
+    def toggle_record(self):
+        if self.sim is None or self._live is None:
+            return
+        if self._live.recording:
+            self.sim.stop_recording()
+            return
+        try:
+            name = export.safe_name(self.exp_name.get())
+        except ValueError as exc:
+            messagebox.showerror("Recording", str(exc))
+            return
+        self.sim.start_recording(name)
+
+    def _poll_live(self):
+        sim = self.sim
+        if sim is None:
+            return
+        view = sim.view()
+        old = self._live
+        self._live = view
+        if view.state == simulation.RUNNING and (old is None or old.state == simulation.STARTING):
+            self.status.set("Running. Record saves LiDAR frames; Pause (or Space) freezes; Stop ends it.")
+        if view.recording and (old is None or not old.recording):
+            self.status.set("Recording into {} ...".format(view.recording))
+        for run_dir, frames in sim.pop_finished():
+            self._recording_finished(run_dir, frames)
+        if view.state in (simulation.STOPPED, simulation.FAILED):
+            self.sim = None
+            sim.join(1.0)
+            self._set_editing(True)
+            self.check_carla()
+            if view.state == simulation.FAILED:
+                self.status.set("Simulation failed: " + view.error)
+                messagebox.showerror("Simulation", view.error)
+            else:
+                self.status.set("Simulation stopped; CARLA is back to normal.")
+            self.redraw()
+        if old is None or (view.frame, view.state, view.recording, view.frames_saved) != (
+                old.frame, old.state, old.recording, old.frames_saved):
+            self._update_sim_bar()
+            self.redraw()
+
+    def _recording_finished(self, run_dir, frames):
+        name = os.path.basename(run_dir)
+        if frames == 0:
+            self.status.set("Recording {} ended without any frame.".format(name))
+        elif self.process_after.get():
+            self.status.set("Recorded {} frames ({}); processing up to the BEV...".format(frames, name))
+            self.offline.submit("process", _job_process, run_dir, None)
+            return
+        else:
+            self.status.set("Recorded {} frames ({}). Process them in the BEV tab.".format(frames, name))
+        self.refresh_runs(select=run_dir)
+
+    def _set_editing(self, on):
+        for widget in self._setting_widgets + self._driving_widgets:
+            widget.state(["!disabled"] if on else ["disabled"])
+        self.map_box.state(["!disabled"] if on else ["disabled"])
+        if on:
+            self._sync_driving_box()
+        self._update_sim_bar()
+        self._update_carla_widgets()
+
+    def _update_sim_bar(self):
+        view = self._live if self.sim is not None else None
+        state = None if self.sim is None else (view.state if view is not None else simulation.STARTING)
+        running = state in (simulation.RUNNING, simulation.PAUSED)
+        recording = bool(view is not None and view.recording)
+        for button, on in ((self.btn_start, self.sim is None), (self.btn_pause, running),
+                           (self.btn_stop, self.sim is not None and state != simulation.STOPPING),
+                           (self.btn_record, running)):
+            color = button.color if on else BUTTON_OFF
+            button.configure(state="normal" if on else "disabled", bg=color, activebackground=color,
+                             cursor="hand2" if on else "arrow")
+        self.btn_pause.configure(text="\u25b6  Resume" if state == simulation.PAUSED else "\u275a\u275a  Pause")
+        self.btn_record.configure(text="\u25a0  Stop recording" if recording else "\u25cf  Record")
+        if state is None:
+            text = "Stopped. Place the vehicles, check the Settings, then Start (CARLA must be running)."
+        elif state == simulation.STARTING:
+            text = "Starting: spawning the vehicles..."
+        elif state == simulation.STOPPING:
+            text = "Stopping..."
+        else:
+            text = "{}   {:.1f} s simulated   {:.2f} x real time".format(
+                "PAUSED" if state == simulation.PAUSED else "Running", view.sim_time, view.realtime)
+            if recording:
+                text += "      \u25cf REC  {} frames  ->  {}".format(view.frames_saved,
+                                                                     os.path.basename(view.recording))
+        self.sim_text.set(text)
+
+    # ================================================================== BEV of the recordings
+    def _selected_run(self):
+        i = self.run_box.current()
+        return self.runs[i] if 0 <= i < len(self.runs) else None
+
+    def _selected_frame(self):
+        run, i = self._selected_run(), self.frame_box.current()
+        return run.frames[i] if run is not None and 0 <= i < len(run.frames) else None
+
+    def refresh_runs(self, select=None, frame=None):
+        """Read data/runs again; keep the selected run and frame unless `select` / `frame` say otherwise."""
+        current = self._selected_run()
+        select = select or (current.path if current else None)
+        frame = frame if frame is not None else self._selected_frame()
+        self.runs = results.list_runs(results.runs_dir(self.cfg))
+        self.run_box["values"] = [r.label for r in self.runs]
+        paths = [r.path for r in self.runs]
+        if not self.runs:
+            self.run_box.set("")
+            self.frame_box["values"] = []
+            self.frame_box.set("")
+            self._set_bev(None)
+            self.bev_info.configure(text="No recording yet in {}.".format(results.runs_dir(self.cfg)))
+            return
+        self.run_box.current(paths.index(select) if select in paths else 0)
+        self._on_run_chosen(frame if select in paths else None)
+
+    def _on_run_chosen(self, frame=None):
+        run = self._selected_run()
+        if run is None:
+            return
+        self.frame_box["values"] = ["{}{}".format(f, " (BEV)" if f in run.processed else "") for f in run.frames]
+        if run.frames:
+            self.frame_box.current(run.frames.index(frame) if frame in run.frames else len(run.frames) - 1)
+        self._on_frame_chosen()
+
+    def _on_frame_chosen(self):
+        run, frame = self._selected_run(), self._selected_frame()
+        overlay, problem = None, ""
+        if run is not None and frame is not None and frame in run.processed:
+            try:
+                overlay = results.bev_overlay(run.path, frame)
+            except (OSError, ValueError, KeyError) as exc:
+                problem = "Cannot read the BEV of frame {}: {}".format(frame, exc)
+        self._set_bev(overlay)
+        if run is None or frame is None:
+            text = "No frame in this run."
+        elif problem:
+            text = problem
+        elif overlay is None:
+            text = "Frame {} is not processed yet: press 'Process this frame'.".format(frame)
+        else:
+            text = "{}, frame {}: {} CAVs.".format(overlay.town or "?", frame, len(overlay.cavs))
+            if overlay.town != self.plan.town:
+                text += " Recorded on {}: open that map to see the BEV on it.".format(overlay.town)
+        self.bev_info.configure(text=text)
+
+    def _set_bev(self, overlay):
+        self.bev = overlay
+        for child in self.bev_legend.winfo_children():
+            child.destroy()
+        names = [c.name for c in overlay.cavs] if overlay else []
+        chosen = self.cav_box.get()
+        self.cav_box["values"] = names
+        if names:
+            self.cav_box.current(names.index(chosen) if chosen in names else 0)
+        else:
+            self.cav_box.set("")
+        for button in [self.btn_figure] + self.view_buttons:
+            button.state(["!disabled"] if names else ["disabled"])
+        chosen = self.cav_view_box.get()
+        self.cav_view_box["values"] = names
+        if names:
+            self.cav_view_box.current(names.index(chosen) if chosen in names else 0)
+        else:
+            self.cav_view_box.set("")
+        for i, cav in enumerate(overlay.cavs if overlay else []):
+            row = ttk.Frame(self.bev_legend)
+            row.pack(anchor="w")
+            ttk.Label(row, text="\u25a0", foreground=BEV_COLORS[i % len(BEV_COLORS)],
+                      font=("Segoe UI", 12)).pack(side="left")
+            ttk.Label(row, text=" {}: {} cells, {} points".format(cav.name, len(cav.cells),
+                                                                  cav.non_ground_points)).pack(side="left")
+        self.redraw()
+
+    def _on_show_bev(self):
+        if self.show_bev.get() and self.bev is not None:
+            if self.bev.town == self.plan.town:
+                self.view.fit(self.bev.bounds())
+            else:
+                self.status.set("This BEV was recorded on {}: open that map.".format(self.bev.town))
+        elif self.show_bev.get():
+            self.status.set("Choose a processed frame in the BEV tab first.")
+        self.redraw()
+
+    def process_run(self, all_frames):
+        run, frame = self._selected_run(), self._selected_frame()
+        if run is None or (frame is None and not all_frames):
+            return
+        for button in (self.btn_process, self.btn_process_all):
+            button.state(["disabled"])
+        self.bev_info.configure(text="Processing {} of {}...".format(
+            "every frame" if all_frames else "frame {}".format(frame), run.name))
+        self.offline.submit("process", _job_process, run.path, None if all_frames else [frame])
+
+    def open_figure(self):
+        run, frame, cav = self._selected_run(), self._selected_frame(), self.cav_box.get()
+        if run is None or frame is None or not cav:
+            return
+        self.bev_info.configure(text="Drawing {} of frame {}...".format(cav, frame))
+        self.offline.submit("figure", _job_figure, run.path, frame, cav)
+
+    def open_view(self, which, cav=None):
+        run, frame = self._selected_run(), self._selected_frame()
+        if run is None or frame is None or self.bev is None or (which == "cav" and not cav):
+            return
+        self.bev_info.configure(text="Drawing {} of frame {}...".format(cav or which.replace("_", " "), frame))
+        self.offline.submit("view", _job_view, run.path, frame, which, cav)
+
+    def _show_image(self, path):
+        from PIL import Image, ImageTk
+        img = Image.open(path)
+        scale = min(1.0, self.root.winfo_screenheight() * 0.85 / img.height,
+                    self.root.winfo_screenwidth() * 0.9 / img.width)
+        if scale < 1.0:
+            img = img.resize((int(img.width * scale), int(img.height * scale)), Image.LANCZOS)
+        top = tk.Toplevel(self.root)
+        top.title(os.path.basename(path))
+        photo = ImageTk.PhotoImage(img)
+        label = ttk.Label(top, image=photo)
+        label.image = photo  # keep a reference, or Tk shows nothing
+        label.pack()
+        ttk.Label(top, text=path, style="Hint.TLabel").pack(anchor="w", padx=8, pady=4)
+
+    def _on_offline_result(self, name, ok, result):
+        for button in (self.btn_process, self.btn_process_all):
+            button.state(["!disabled"])
+        if not ok:
+            what = "Processing" if name == "process" else "Figure"
+            self.bev_info.configure(text="{} failed: {}".format(what, result))
+            messagebox.showerror(what, str(result))
+            return
+        if name == "process":
+            run_dir, outputs = result
+            frames = [int(os.path.basename(os.path.normpath(o))) for o in outputs]
+            self.refresh_runs(select=run_dir, frame=frames[-1])
+            self.side.select(self.bev_tab)
+            self.show_bev.set(True)
+            self._on_show_bev()
+            self.status.set("Processed {} frame(s) of {}.".format(len(frames), os.path.basename(run_dir)))
+        else:
+            self.bev_info.configure(text="Figure saved: {}".format(result))
+            self._show_image(result)
 
     # ================================================================== CARLA
     def check_carla(self):
@@ -1064,23 +1743,21 @@ class EditorApp:
     def _update_carla_widgets(self):
         online = self.server_town is not None
         same = online and self.server_town == self.plan.town
+        idle = self.sim is None
         info = catalog.find_map(self.maps, self.plan.town)
-        for button in (self.btn_preview, self.btn_test, self.btn_aerial):
-            button.state(["!disabled"] if same else ["disabled"])
-        can_switch = bool(self.carla_root) and info is not None and info.installed and not same
-        self.btn_startup.state(["!disabled"] if can_switch else ["disabled"])
+        for label in CARLA_ACTIONS:
+            self._carla_menu.entryconfigure(label, state="normal" if same and idle else "disabled")
+        can_switch = bool(self.carla_root) and info is not None and info.installed and not same and idle
+        self._carla_menu.entryconfigure(STARTUP_MAP, state="normal" if can_switch else "disabled")
         if not online:
-            text = "CARLA is not running. Editing works offline; start CARLA to preview, test or record."
+            text = "CARLA: not running"
         elif same:
-            text = "CARLA is running {}: preview, test spawn, aerial photo and recording are available.".format(
-                self.server_town)
+            text = "CARLA: running {}  \u2713".format(self.server_town)
         elif info is not None and not info.installed:
-            text = "CARLA is running {}. {} is not installed in this CARLA (only its road network is), " \
-                   "so it can be edited but not simulated.".format(self.server_town, self.plan.town)
+            text = "CARLA: running {} ({} is edit only)".format(self.server_town, self.plan.town)
         else:
-            text = "CARLA is running {}, not {}. Use the button below and restart CARLA to record this " \
-                   "map.".format(self.server_town, self.plan.town)
-        self.carla_info.configure(text=text)
+            text = "CARLA: running {} (plan: {})".format(self.server_town, self.plan.town)
+        self.carla_status.set(text)
 
     def preview(self):
         paths = [(v.role, route.points.tolist()) for v in self.plan.vehicles if v.route
@@ -1095,8 +1772,7 @@ class EditorApp:
         self.status.set("Test spawn running...")
 
     def capture_aerial(self):
-        self.aerial_progress["value"] = 0
-        self.btn_aerial.state(["disabled"])
+        self._carla_menu.entryconfigure(CARLA_ACTIONS[3], state="disabled")
         progress = lambda done, total: self.worker.results.put(("progress", True, (done, total)))  # noqa: E731
         georef = self.backgrounds["roads"][1]
         self.worker.submit("aerial", _job_aerial, self.plan.town, self.road_map.bounds(), georef.ppm, progress)
@@ -1117,23 +1793,27 @@ class EditorApp:
                                     "'Check connection'.".format(self.plan.town, path))
 
     def _poll_worker(self):
-        try:
-            while True:
-                name, ok, result = self.worker.results.get_nowait()
-                self._on_worker_result(name, ok, result)
-        except queue.Empty:
-            pass
+        for worker in (self.worker, self.offline):
+            try:
+                while True:
+                    name, ok, result = worker.results.get_nowait()
+                    self._on_worker_result(name, ok, result)
+            except queue.Empty:
+                pass
+        self._poll_live()
         self.root.after(100, self._poll_worker)
 
     def _on_worker_result(self, name, ok, result):
+        if name in ("process", "figure", "view"):
+            self._on_offline_result(name, ok, result)
+            return
         if name == "progress":
             done, total = result
-            self.aerial_progress["value"] = 100.0 * done / total
+            self.status.set("Aerial photo: tile {} of {}...".format(done, total))
             return
         if name == "status":
             if ok:
                 self.server_town, cached = result
-                self.carla_status.set("CARLA: running {}".format(self.server_town))
                 info = catalog.find_map(self.maps, cached.name)
                 if info is None or not info.installed:  # no CARLA folder: use the server's map
                     self._find_maps()
@@ -1145,7 +1825,6 @@ class EditorApp:
                         self.open_map(cached.name)
             else:
                 self.server_town = None
-                self.carla_status.set("CARLA: not running")
             self._update_carla_widgets()
             return
         if not ok:
@@ -1172,16 +1851,40 @@ class EditorApp:
 
     def show_help(self):
         messagebox.showinfo("Controls", (
-            "Left click on a road: add a vehicle (role chosen in the Vehicles tab, keys 1 / 2)\n"
-            "Left click on a vehicle: select it; drag it to move it along the roads\n"
-            "R: switch the selected vehicle between CAV and traffic\n"
-            "T: draw a route for the selected vehicle (click points on the roads, Enter / Esc ends,\n"
-            "    Backspace removes the last point)\n"
-            "Delete: remove the selected vehicle\n"
-            "Mouse wheel: zoom   |   right or middle drag: pan   |   F: fit vehicles\n"
-            "Ctrl+Z / Ctrl+Y: undo / redo   |   Ctrl+S: save   |   Ctrl+O: open\n\n"
-            "Dashed outline under the cursor: where a click would place a vehicle\n"
-            "(green = allowed, red = not allowed, the reason is in the status bar)."))
+            "SCENE\n"
+            "  Left click on a road: add a vehicle (1 = CAV, 2 = traffic)\n"
+            "  Click a vehicle: select it; drag it: move it along the roads\n"
+            "  R: CAV <-> traffic   Del: delete   T: draw a route (Enter ends)\n"
+            "  Wheel: zoom   Right drag: pan   F: fit vehicles   Ctrl+Z / Ctrl+Y: undo / redo\n\n"
+            "SIMULATION (CARLA running the plan's map)\n"
+            "  Start: spawn the scene and drive it in real time\n"
+            "  Pause / Resume (Space): freeze or continue\n"
+            "  Record: save LiDAR frames while it drives; press again to stop, then the BEV is computed\n"
+            "  Stop: remove everything from CARLA\n\n"
+            "SETTINGS: hover any setting to see what it does.\n"
+            "BEV: every CAV's BEV of a recorded frame, drawn on the map."))
+
+
+def _number(var, label, kind=float):
+    """The number in a Tk variable, or ValueError naming the field."""
+    text = str(var.get()).strip()
+    try:
+        value = float(text)
+    except ValueError:
+        raise ValueError("{}: '{}' is not a number".format(label, text))
+    if kind is int:
+        if value != int(value):
+            raise ValueError("{}: '{}' must be a whole number".format(label, text))
+        return int(value)
+    return value
+
+
+def _started(run_name):
+    """Start time (epoch seconds) from a run folder name '<YYYY-mm-dd>_<HHMMSS>_<name>', or 0."""
+    try:
+        return time.mktime(time.strptime(run_name[:17], "%Y-%m-%d_%H%M%S"))
+    except ValueError:
+        return 0.0
 
 
 def _sharp_on_windows():

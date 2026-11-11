@@ -27,6 +27,7 @@ Design rules:
 | `drive_cars(cfg, seconds=40)` | Spawns the scenario's CAVs and traffic with autopilot and paces the simulation to real time so you can watch. Saves nothing. |
 | `record_lidar(cfg, name="run")` | Creates `data/runs/<date>_<time>_<name>/`, saves `config.yaml`, spawns vehicles, mounts one LiDAR per CAV, records frames, saves previews. Returns the run folder. |
 | `show_frame(run_dir, frame=None, view="both")` | Plots one recorded frame (default: the last). `view`: `sensor`, `world` or `both`. Works without CARLA. |
+| `process_recording(run_dir, frames=None, preview="last", **settings)` | Runs the processing (ego mask → road filter → ground removal → BEV → sectors → metadata) on every frame of a run (or the given ones) into `<run>/processed/<frame>/`; `settings` go to `processing.process_frame`. Used by `main.py process`, `main.py record --process` and the editor. Works without CARLA. |
 | `open_editor(cfg, town=None, plan=None)` | Opens the scenario editor window (see [EDITOR.md](EDITOR.md)). |
 | `import_openscenario(cfg, xosc, name, ...)` | `.xosc` → spawn plan + experiment YAML; returns the paths and the warnings (see [OPENSCENARIO.md](OPENSCENARIO.md)). |
 | `export_openscenario(cfg, plan, xosc)` | Spawn plan → `.xosc` for the QGIS editor / ScenarioRunner. |
@@ -39,10 +40,13 @@ Design rules:
 |---|---|
 | `model.py` | `ScenarioPlan`: the vehicles being edited, names (`cav_0`...), overlap test, spawn-area check, undo/redo, load/save. No window, no CARLA: unit-tested. |
 | `map_view.py` | `MapView`: Tk canvas showing a georeferenced image with zoom around the cursor and pan; redraws the image only when the view changes. |
-| `export.py` | Plan + experiment YAML files, command line for recording. |
+| `export.py` | Plan + experiment YAML files (with the LiDAR, seed and red-light settings when given), command line for recording (`--process`). |
+| `results.py` | Recorded runs and their BEV: `list_runs`, `run_info`, `bev_overlay` (every CAV's occupied BEV cells and the frame's vehicle boxes in the world frame), `make_figure`. No window, no CARLA: unit-tested. |
 | `openscenario_bridge.py` | `.xosc` ↔ `ScenarioPlan`: heights from the road, LanePosition / RoadPosition on the map, warnings for off-lane or wrong-way vehicles. |
 | `settings.py` | CARLA folder and map cache shared by the window and the API. |
-| `app.py` | The window: toolbar, map, Vehicles / Rules / CARLA / Export tabs. CARLA calls run on a background thread so the window never freezes. |
+| `simulation.py` | `LiveSimulation`: Start / Pause / Record / Stop of a live simulation on its own thread (spawn, real-time pacing, LiDARs mounted only while recording, frames written like `main.py record`), `LiveView` / `LiveVehicle` read by the window. No window: unit-tested with a fake session. |
+| `widgets.py` | Tooltips, the scrolling tab frame, coloured buttons. |
+| `app.py` | The window: menus (File, CARLA, Help), simulation bar, map, Scene / Settings / BEV tabs. CARLA calls, processing and the live simulation each run on their own thread, so the window never freezes. |
 
 ## Core: `cavlidar/core/`
 
@@ -188,6 +192,16 @@ CARLA uses a **left-handed** frame (x forward, y right, z up); all plots invert 
 |---|---|
 | `plot_sensor_frame(meta, clouds, out)` | One panel per CAV in its own frame, coloured by height. |
 | `plot_world_frame(meta, clouds, out)` | All CAVs moved to the world frame on one image (point-level fusion) with ground-truth boxes. Walls seen by two CAVs must overlap — a quick check that poses are right. |
+
+### `visualization/pipeline.py`
+| Function | What it does |
+|---|---|
+| `stages_from_processed(run, frame, cav)` | One CAV's sweep stage by stage as the processing saved it: raw, ego, off-road, ground, non-ground points, BEV occupancy, sector metadata, sensor height, ground-truth boxes in the sensor frame (display only). |
+| `stages_in_memory(run, frame, cav)` | The same, computed again with the default settings; nothing written. |
+| `bev_cells_world(occupancy, bounds, pose)` | Occupied BEV cells → (K, 4, 2) world-frame corners with the sensor pose (the editor's map overlay). |
+| `save_figure(stages, title, out)` | Raw → drivable road → ground removed → BEV with sectors, four panels (`tools/make_pipeline_figure.py`, the editor's *Open figure*). |
+| `vehicle_returns(run, frame)`, `cav_summaries`, `write_tables` | Per vehicle and CAV: points on the body raw / after the road filter / after the ground removal, BEV cells on the box, who sees it (≥ 10 points); per CAV totals; `vehicles.csv`, `cavs.csv`. Ground truth only to count. |
+| `world_points_figure`, `world_bev_figure`, `vehicles_figure`, `cav_figure`, `make_view`, `compare` | Every CAV before and after filtering, each figure on its own: raw clouds superposed in the world frame, after filtering, the BEV of all CAVs, points per car, and each CAV alone (`tools/compare_cavs.py`, the editor's BEV tab). |
 
 ## Adding something new
 

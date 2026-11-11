@@ -93,6 +93,53 @@ class TestExport(unittest.TestCase):
         self.assertFalse(cfg.scenario.autopilot)
         self.assertEqual(cfg.scenario.spawn_center, [0.0, -120.0])
 
+    def test_export_writes_lidar_seed_and_red_lights(self):
+        plan = plan_with((Role.CAV, pose(0, -130)), (Role.TRAFFIC, pose(20, -130)))
+        lidar = {"channels": 64, "range": 80.0, "points_per_second": 2000000, "mount_z": 1.9, "noise_stddev": 0.02}
+        options = export.ExportOptions("sensors", lidar=lidar, seed=11, ignore_lights=[0, 100], process=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            _, yaml_rel = export.export(plan, options, root=tmp)
+            cfg = load_config(DEFAULT_CONFIG, os.path.join(tmp, yaml_rel))
+        li = cfg.lidar
+        self.assertEqual((li.channels, li.range, li.points_per_second, li.mount_z, li.noise_stddev),
+                         (64, 80.0, 2000000, 1.9, 0.02))
+        self.assertEqual(cfg.simulation.seed, 11)
+        self.assertEqual(list(cfg.scenario.ignore_lights_range), [0.0, 100.0])
+        self.assertEqual(cfg.simulation.fixed_delta_seconds, 0.05)       # never written: one sweep per tick
+        self.assertEqual(li.rotation_frequency, 20.0)
+        with self.assertRaises(ValueError):
+            export.experiment_dict(plan, export.ExportOptions("x", lidar={"fov": 3}), "p.json")
+
+    def test_export_without_settings_keeps_the_defaults(self):
+        data = export.experiment_dict(plan_with((Role.CAV, pose(0, 0))), export.ExportOptions("x"), "p.json")
+        self.assertNotIn("lidar", data)
+        self.assertNotIn("simulation", data)
+        self.assertNotIn("ignore_lights_range", data["scenario"])
+
+    def test_record_command(self):
+        cmd = export.record_command("config/experiments/custom/a.yaml", "a")
+        self.assertEqual(cmd[1:], ["main.py", "record", "--config", "config/experiments/custom/a.yaml", "--name", "a"])
+        self.assertEqual(export.record_command("x.yaml", "a", process=True)[-1], "--process")
+
+    def test_window_helpers(self):
+        from cavlidar.editor.app import _number, _started
+
+        class Var:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        self.assertEqual(_number(Var(" 32 "), "Channels", int), 32)
+        self.assertEqual(_number(Var("2.4"), "Mount"), 2.4)
+        with self.assertRaises(ValueError):
+            _number(Var("abc"), "Range")
+        with self.assertRaises(ValueError):
+            _number(Var("32.5"), "Channels", int)
+        self.assertGreater(_started("2026-11-09_101500_name"), _started("2026-11-09_101459_name"))
+        self.assertEqual(_started("no_date"), 0.0)
+
     def test_export_needs_a_cav(self):
         with tempfile.TemporaryDirectory() as tmp, self.assertRaises(ValueError):
             export.export(plan_with((Role.TRAFFIC, pose(0, 0))), export.ExportOptions("x"), root=tmp)

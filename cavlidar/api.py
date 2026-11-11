@@ -106,6 +106,30 @@ def record_lidar(cfg, name="run"):
     return run_dir
 
 
+def process_recording(run_dir, frames=None, preview="last", **settings):
+    """
+    Run the offline processing (ego mask -> road filter -> ground removal -> BEV -> sectors -> metadata)
+    on the frames of a recorded run (default: all of them), with the default settings of
+    `python -m cavlidar.backend.processing`. Outputs go to <run>/processed/<frame>/; the recording is not
+    changed. `preview`: "last" (preview PNGs of the last frame only), "all" or "none". `settings` go to
+    process_frame (e.g. road_filter=False, resolution=0.25).
+    Returns the output folders. Works without CARLA (the map's OpenDRIVE file is needed for the road filter).
+    """
+    from .backend.processing.__main__ import process_frame
+    from .backend.recording import storage
+
+    available = storage.list_frames(run_dir)
+    chosen = available if frames is None else [f for f in available if f in set(frames)]
+    if not chosen:
+        raise ValueError("No frames to process in {} (asked {}, recorded {})".format(run_dir, frames, available))
+    out = []
+    for i, frame in enumerate(chosen):
+        draw = preview == "all" or (preview == "last" and i == len(chosen) - 1)
+        out.append(str(process_frame(run_dir, frame=frame, preview=draw, **settings)))
+        log.info("Processed frame %d (%d/%d)", frame, i + 1, len(chosen))
+    return out
+
+
 def open_editor(cfg, town=None, plan=None):
     """
     Open the scenario editor window: place CAVs and traffic by hand on any

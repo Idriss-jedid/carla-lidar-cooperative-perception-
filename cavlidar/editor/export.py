@@ -5,7 +5,11 @@ Turn an edited plan into files the recorder understands:
     config/experiments/custom/<name>.yaml          the experiment that uses them
 
 The YAML is then recorded like any other experiment:
-    python main.py record --config config/experiments/custom/<name>.yaml --name <name>
+    python main.py record --config config/experiments/custom/<name>.yaml --name <name> [--process]
+
+Only what the editor shows is written: the scene, the recording, and (when set in the editor) the LiDAR
+settings, the seed and the red-light range. The time step is never written: it stays
+1 / lidar.rotation_frequency (0.05 s), so every tick is one full LiDAR sweep.
 """
 import os
 import re
@@ -32,6 +36,10 @@ class ExportOptions:
     save_every: int = 20
     spawn_bbox: Optional[List[float]] = None
     camera_height: float = 70.0
+    lidar: Optional[dict] = None          # e.g. {"channels": 32, "range": 120.0, ...}; None = default.yaml
+    seed: Optional[int] = None            # simulation.seed; None = default.yaml
+    ignore_lights: Optional[List[float]] = None   # scenario.ignore_lights_range [min, max] %; None = default.yaml
+    process: bool = False                 # record with --process: straight on to the BEV
 
 
 def safe_name(text):
@@ -42,10 +50,13 @@ def safe_name(text):
     return name
 
 
+LIDAR_KEYS = ("channels", "range", "points_per_second", "mount_z", "noise_stddev")
+
+
 def experiment_dict(plan, options, plan_path):
     counts = plan.counts()
     centre = plan.centre() or (0.0, 0.0)
-    return {
+    data = {
         "server": {"town": plan.town},
         "scenario": {
             "num_cavs": counts[Role.CAV],
@@ -63,6 +74,16 @@ def experiment_dict(plan, options, plan_path):
             "camera_height": options.camera_height,
         },
     }
+    if options.ignore_lights is not None:
+        data["scenario"]["ignore_lights_range"] = [float(v) for v in options.ignore_lights]
+    if options.seed is not None:
+        data["simulation"] = {"seed": int(options.seed)}
+    if options.lidar:
+        unknown = set(options.lidar) - set(LIDAR_KEYS)
+        if unknown:
+            raise ValueError("Unknown LiDAR settings: {}".format(", ".join(sorted(unknown))))
+        data["lidar"] = {k: options.lidar[k] for k in LIDAR_KEYS if k in options.lidar}
+    return data
 
 
 def export(plan, options, root=PROJECT_ROOT):
@@ -80,13 +101,14 @@ def export(plan, options, root=PROJECT_ROOT):
     return plan_rel, yaml_rel
 
 
-def record_command(yaml_rel, name):
-    return [sys.executable, "main.py", "record", "--config", yaml_rel.replace(os.sep, "/"), "--name", name]
+def record_command(yaml_rel, name, process=False):
+    cmd = [sys.executable, "main.py", "record", "--config", yaml_rel.replace(os.sep, "/"), "--name", name]
+    return cmd + ["--process"] if process else cmd
 
 
-def launch_recording(yaml_rel, name, root=PROJECT_ROOT):
-    """Start the recording in its own console window, which stays open to show the result."""
-    cmd = record_command(yaml_rel, name)
+def launch_recording(yaml_rel, name, root=PROJECT_ROOT, process=False):
+    """Start the recording (and the processing) in its own console window, which stays open to show the result."""
+    cmd = record_command(yaml_rel, name, process)
     if os.name == "nt":
         return subprocess.Popen(["cmd", "/k"] + cmd, cwd=root, creationflags=subprocess.CREATE_NEW_CONSOLE)
     return subprocess.Popen(cmd, cwd=root)

@@ -17,6 +17,15 @@ flowchart LR
 
 Steps A–B need CARLA running. Everything from C onwards runs offline, on recorded files, without CARLA.
 
+Two ways to go through the whole chain:
+
+- **Commands:** `python main.py record --config <experiment>.yaml --name <name> --process` records and then processes
+  every frame up to the BEV; `python main.py process data/runs/<run>` processes a run recorded earlier.
+- **Scenario editor:** place the vehicles, check the Settings (LiDAR, traffic, recording), press **Start** to watch them
+  drive in real time, **Record** for a while, and when the recording stops the map shows every CAV's BEV
+  ([EDITOR.md](EDITOR.md#tutorial-from-an-empty-map-to-the-bev)). Live recordings are not repeatable; for experiments
+  use the command (or the editor's *Record in a new console*).
+
 ![One recorded sweep through the processing chain](images/pipeline_stages.png)
 
 *One real sweep (e12, cav2): 26 661 returns → 16 216 on the drivable road → 2 941 non-ground points → 73 occupied
@@ -118,7 +127,7 @@ CarlaUE4.exe -windowed -ResX=1280 -ResY=720
 
 Do not add `-quality-level=Low`: on a 4 GB GPU CARLA 0.9.12 crashes with *"Shader compilation failures are Fatal"*.
 Changing the map from Python (`load_world()`) also crashed the server, so the map CARLA opens at start is set in
-`CarlaUE4/Config/DefaultEngine.ini` (the editor's CARLA tab has a button for it; restart CARLA afterwards). The default
+`CarlaUE4/Config/DefaultEngine.ini` (the editor's CARLA menu has an entry for it; restart CARLA afterwards). The default
 map of every experiment is Town03, the paper's map.
 
 **First commands:**
@@ -126,7 +135,7 @@ map of every experiment is Town03, the paper's map.
 ```bash
 python main.py check                  # connection, versions, map, spawn points
 python main.py drive --seconds 40     # spawn the default scene and watch it drive (saves nothing)
-python -m unittest discover -s tests -t . -v   # 99 tests, no CARLA needed
+python -m unittest discover -s tests -t . -v   # 115 tests, no CARLA needed
 ```
 
 `check` ends with `[SUCCESS] Connected to CARLA, map Town03 ready.` If it fails, see
@@ -221,12 +230,17 @@ were converted to world positions and snapped to lanes by `tools/make_figure2_pl
 
 ![Figure 2 re-created on Town03](images/figure2_town03.png)
 
+**With OpenCDA, as in the paper.** The paper generated its 228 scenarios with OpenCDA. `tools/opencda_scenario.py`
+does the same: it draws a scenario from a seed, OpenCDA's behaviour agent drives the CAVs, and the run is saved in the
+same format as a recording. It runs in its own Python 3.7 environment: [OPENCDA.md](OPENCDA.md).
+
 ---
 
 ## 5. Step 2: record
 
 ```bash
 python main.py record --config config/experiments/scenario/e12_figure2_driving.yaml --name e12
+python main.py record --config config/experiments/scenario/e12_figure2_driving.yaml --name e12 --process  # + step 4
 ```
 
 What happens, in order (`api.record_lidar` → `simulator/session.py` → `recording/recorder.py`):
@@ -308,12 +322,15 @@ meta, clouds = storage.load_frame(run_dir, frames[-1])   # clouds = {"cav0": (N,
 ## 7. Step 4: from the point cloud to the BEV
 
 ```bash
-python -m cavlidar.backend.processing data/runs/<run>                  # last frame
-python -m cavlidar.backend.processing data/runs/<run> --frame 31264
+python main.py process data/runs/<run>                                 # every frame, default settings
+python main.py process data/runs/<run> --frame 31264                   # one frame
+python -m cavlidar.backend.processing data/runs/<run> --frame 31264 --resolution 0.25   # one frame, own settings
 ```
 
 For every CAV of the frame: **ego-body mask → drivable-road filter → ground removal → BEV → static sectors → metadata**.
 The raw files in `frames/` are never changed; everything goes to `data/runs/<run>/processed/<frame>/`.
+`main.py process` (also run by `record --process` and by the editor) uses the default settings below and draws the
+preview PNGs of the last frame only; the module command processes one frame (the last by default) with any settings:
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -487,6 +504,51 @@ python tools/eval_ground.py data/runs/<run> [<run> ...]      # ground removal: v
 facing the sensor); `tools/diagnose_label_alignment.py` runs the controlled CARLA diagnostic. Results and the
 reasoning: [LABEL_ALIGNMENT.md](LABEL_ALIGNMENT.md).
 
+### Every CAV, before and after filtering
+
+```bash
+python tools/compare_cavs.py data/runs/<run> --frame 31264     # or the editor: BEV tab, one button per figure
+```
+
+writes each figure on its own, and two tables, into `processed/<frame>/`, and prints the tables:
+
+| Output | Content |
+|---|---|
+| `world_raw.png` | the raw point clouds of every CAV superposed in the world frame (colour = CAV), CARLA's ground-truth boxes in grey |
+| `world_filtered.png` | the non-ground points left after ego mask + road filter + ground removal, every CAV in the world frame |
+| `world_bev.png` | the BEV of all CAVs together: non-ground points per 0.5 m cell, with a zoom on the car with the most points |
+| `vehicles.png` | points on each car's body before → after filtering (all CAVs together), and which CAVs see it |
+| `cavN_before_after.png` | one CAV in its own frame: raw sweep, after filtering, BEV (points per cell) |
+| `vehicles.csv` | per vehicle and CAV: distance, points on the body in the raw sweep, after the road filter, after the ground removal, BEV cells on its box |
+| `cavs.csv` | per CAV: points at each stage, BEV cells, vehicle points and vehicles seen before / after |
+
+A point is on a vehicle when it lies in the vehicle's box (+0.3 m), above its lowest 0.3 m; a vehicle is *seen* by a
+CAV with at least 10 such points. In the raw view every CARLA box is drawn in grey; in the filtered views a box is
+solid when a CAV sees the car and dashed when none does: a box on the picture does not mean the LiDAR hit that car.
+
+![e12, frame 31264: raw point clouds of the 4 CAVs in the world frame](images/world_raw.png)
+
+![e12, frame 31264: after filtering](images/world_filtered.png)
+
+![e12, frame 31264: BEV of all CAVs together](images/world_bev.png)
+
+![e12, frame 31264: points on each car before and after filtering](images/vehicles.png)
+
+What the two recordings show:
+
+| Frame | Points on vehicles, raw → after filtering | Vehicles seen (one CAV alone → all 4) | No point at all |
+|---|---|---|---|
+| e12, 31264 (end of the run, CAVs 52–117 m apart) | 3 610 → 3 583 (99.3 %) | 3 to 7 → **12 of 24** | 6 |
+| e01, 361114 | 4 909 → 4 893 (99.7 %) | 5 to 7 → **17 of 24** | 5 |
+
+The filtering keeps the vehicles: the cars missing from a BEV were never hit by that CAV's LiDAR. They are farther
+than the BEV's ±60 m, hidden behind another vehicle (in e12 a fire truck 8 m behind cav2 fills its whole rear
+sector) or behind buildings. A car 35–40 m away gets 2–3 of the 32 laser rings, 10–20 points on the side facing the
+LiDAR, a short line of 0.5 m cells rather than a filled rectangle. Each CAV alone sees a few vehicles; the four
+together see half of them or more, which is what the paper's sharing is for.
+
+![e12, frame 31264: cav2 before and after filtering](images/cav2_before_after.png)
+
 ---
 
 ## 9. Step 6: how robust is LiDAR → BEV
@@ -523,12 +585,12 @@ python tools/audit_sensitivity.py
 ```bash
 # CARLA 0.9.12 running Town03
 python main.py check
-python main.py record --config config/experiments/scenario/e12_figure2_driving.yaml --name e12
-#   -> data/runs/<date>_<time>_e12/  (10 frames, one per simulated second, 4 CAVs)
-python main.py show data/runs/<date>_<time>_e12 --view both
-python -m cavlidar.backend.processing data/runs/<date>_<time>_e12
+python main.py record --config config/experiments/scenario/e12_figure2_driving.yaml --name e12 --process
+#   -> data/runs/<date>_<time>_e12/  (10 frames, one per simulated second, 4 CAVs), then for every frame:
 #   cav0: raw=..., ego=0, off-road=..., ground=..., non-ground=..., occupied BEV cells=...
-#   -> processed/<frame>/ : grids, sectors, metadata.json, previews
+#   -> processed/<frame>/ : grids, sectors, metadata.json (+ previews of the last frame)
+python main.py show data/runs/<date>_<time>_e12 --view both
+python main.py editor          # BEV tab: the run, its frames, every CAV's BEV on the map, one CAV stage by stage
 python tools/eval_ground.py data/runs/<date>_<time>_e12
 python tools/make_pipeline_figure.py data/runs/<date>_<time>_e12 --cav cav2 --out my_figure.png
 ```
@@ -542,7 +604,7 @@ Moving traffic is not reproducible in CARLA, so a new e12 recording has the same
 | Message / symptom | Cause | Fix |
 |---|---|---|
 | CARLA closes with *"Shader compilation failures are Fatal"* | `-quality-level=Low` on a small GPU | start without it |
-| CARLA crashes when the map changes | `load_world()` on a 4 GB GPU | keep `allow_map_change: false`; set the map in `DefaultEngine.ini` (editor: CARLA tab) and restart CARLA |
+| CARLA crashes when the map changes | `load_world()` on a 4 GB GPU | keep `allow_map_change: false`; set the map in `DefaultEngine.ini` (editor: CARLA menu) and restart CARLA |
 | `ServerUnavailable` | CARLA not started, still loading, or another port | wait for the map to appear; check `server.port` |
 | `MapMismatch` | the experiment's `server.town` is not the loaded map | load that map at start (above) |
 | `SensorTimeout` | the server is too slow, often out of GPU memory | close other GPU programs; `simulation.no_rendering: true`; fewer vehicles |

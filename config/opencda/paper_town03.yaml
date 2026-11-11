@@ -1,0 +1,62 @@
+description: |-
+  The paper's setting (Table 1) as an OpenCDA scenario on Town03, junction 1221. Merged on top of OpenCDA's
+  default.yaml by tools/opencda_scenario.py, which also fills scenario.single_cav_list (CAVs, destinations,
+  behaviour) at random from a seed. Values the paper does not give (LiDAR field of view, drop-off, noise) are
+  those of OpenCDA's v2x data-dump scenario, the setting OpenCDA uses to collect V2X perception data.
+
+world:
+  sync_mode: true
+  fixed_delta_seconds: 0.05        # one full sweep of a 20 Hz LiDAR per tick
+  seed: 1
+
+vehicle_base:
+  sensing:
+    perception:
+      activate: false              # no detector: ground truth comes from the server
+      camera:
+        visualize: 0               # no camera, no window
+        num: 0
+        positions: []
+      lidar:
+        visualize: true            # OpenCDA mounts the LiDAR only when it is visualised; the window is disabled
+        channels: 32               # paper, Table 1
+        range: 120                 # paper
+        points_per_second: 1000000 # paper
+        rotation_frequency: 20     # paper
+        upper_fov: 2
+        lower_fov: -25
+        dropoff_general_rate: 0.3
+        dropoff_intensity_limit: 0.7
+        dropoff_zero_intensity: 0.4
+        noise_stddev: 0.02
+    localization:
+      activate: false
+      debug_helper:
+        show_animation: false
+  map_manager:
+    visualize: false
+    activate: false
+  safety_manager:
+    print_message: false
+  behavior:
+    max_speed: 35                  # replaced per CAV: 20-50 km/h (paper)
+    tailgate_speed: 45             # replaced per CAV: 30-60 km/h (paper)
+    overtake_allowed: false
+    local_planner:
+      debug: false
+      debug_trajectory: false
+
+carla_traffic_manager:
+  sync_mode: true
+  global_distance: 2.0
+  global_speed_perc: 0             # each vehicle then gets -20 % .. +20 % (paper)
+  auto_lane_change: true
+  random: true
+  ignore_lights_percentage: 0      # each vehicle then gets 0 .. 100 % (paper)
+  vehicle_list: ~
+  # x_min, x_max, y_min, y_max, x_step, y_step, number: the paper's spawn area; number set by the runner
+  range:
+    - [-100, 100, -200, 200, 4, 4, 20]
+
+scenario:
+  single_cav_list: []

@@ -7,11 +7,13 @@ called after every redraw, using world_to_screen().
 
 Mouse: wheel = zoom around the cursor, right or middle drag = pan.
 """
+import math
 import tkinter as tk
 
 from PIL import Image, ImageTk
 
 MIN_SCALE, MAX_SCALE = 0.2, 40.0   # screen pixels per metre
+OUTSIDE = (30, 35, 40)             # colour around the map image (same as the canvas)
 
 
 class MapView(tk.Canvas):
@@ -98,17 +100,31 @@ class MapView(tk.Canvas):
             self.on_view_change(self)
 
     def _draw_background(self, w, h):
+        """
+        Only the part of the image inside the window is cropped and scaled, then placed where it belongs.
+        Zoomed far out the window covers much more than the image: cropping the whole window box would
+        build a huge image (PIL refuses above ~179 M pixels).
+        """
         g = self.georef
         x0, y0 = self.screen_to_world(0, 0)
         x1, y1 = self.screen_to_world(w, h)
         px0, py0 = g.to_px(x0, y0)
         px1, py1 = g.to_px(x1, y1)
-        box = tuple(int(round(v)) for v in (px0, py0, px1, py1))
-        if box[2] <= box[0] or box[3] <= box[1]:
+        if px1 <= px0 or py1 <= py0:
             return
-        resample = Image.NEAREST if self.scale > 2 * g.ppm else Image.BILINEAR
-        crop = self.image.crop(box).resize((w, h), resample, reducing_gap=2.0)
-        self._photo = ImageTk.PhotoImage(crop)
+        iw, ih = self.image.size
+        ix0, iy0 = max(int(math.floor(px0)), 0), max(int(math.floor(py0)), 0)
+        ix1, iy1 = min(int(math.ceil(px1)), iw), min(int(math.ceil(py1)), ih)
+        frame = Image.new("RGB", (w, h), OUTSIDE)
+        if ix1 > ix0 and iy1 > iy0:
+            sx, sy = w / (px1 - px0), h / (py1 - py0)          # screen pixels per image pixel
+            left, top = int(round((ix0 - px0) * sx)), int(round((iy0 - py0) * sy))
+            right, bottom = int(round((ix1 - px0) * sx)), int(round((iy1 - py0) * sy))
+            if right > left and bottom > top:
+                resample = Image.NEAREST if self.scale > 2 * g.ppm else Image.BILINEAR
+                part = self.image.crop((ix0, iy0, ix1, iy1)).convert("RGB")
+                frame.paste(part.resize((right - left, bottom - top), resample, reducing_gap=2.0), (left, top))
+        self._photo = ImageTk.PhotoImage(frame)
         self._bg_item = self.create_image(0, 0, image=self._photo, anchor="nw")
 
     # ------------------------------------------------------------------ mouse

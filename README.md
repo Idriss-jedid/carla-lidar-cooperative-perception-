@@ -36,17 +36,19 @@ conda create -n carla012 python=3.8 -y
 conda activate carla012
 pip install -r requirements.txt
 
-# 3. Record a scene: the paper's Figure 2 junction, 4 CAVs, everyone driving
+# 3. Record a scene (the paper's Figure 2 junction, 4 CAVs, everyone driving) and process it up to the BEV
 python main.py check
-python main.py record --config config/experiments/scenario/e12_figure2_driving.yaml --name e12
+python main.py record --config config/experiments/scenario/e12_figure2_driving.yaml --name e12 --process
 python main.py show data/runs/<run_folder> --view world          # plots, no CARLA needed
 
-# 4. From the point clouds to the BEV and the sector metadata (offline, no CARLA)
-python -m cavlidar.backend.processing data/runs/<run_folder>
+# 4. Process a run recorded earlier (offline, no CARLA): BEV grids + sector metadata of every frame
+python main.py process data/runs/<run_folder>
 
-# Place vehicles by hand on any map, draw routes, record
+# Or all of it in the scenario editor: place vehicles, Start (real-time view), Record, see every CAV's BEV on the map
 python main.py editor --map Town03
 ```
+
+![The scenario editor during a live simulation](docs/images/editor_live.png)
 
 Any parameter can be changed without editing a file: `--set lidar.channels=64 --set scenario.num_cavs=6`.
 
@@ -55,13 +57,20 @@ Any parameter can be changed without editing a file: `--set lidar.channels=64 --
 | Part | What it does | Details |
 |---|---|---|
 | Data collection | spawns CAVs and traffic (random, from a spawn plan, the editor or OpenSCENARIO), mounts the paper's LiDAR (32 channels, 120 m, 1M points/s, 20 Hz) on each CAV, records full sweeps in synchronous mode with poses and ground truth of the same tick | [GUIDE.md §3–6](docs/GUIDE.md), [PARAMETERS.md](docs/PARAMETERS.md), [EXPERIMENTS.md](docs/EXPERIMENTS.md) |
-| Scenario editor | a window to place vehicles on any CARLA map, with routes and speeds, checks in the simulator, export and recording | [EDITOR.md](docs/EDITOR.md), [OPENSCENARIO.md](docs/OPENSCENARIO.md) |
+| Scenario editor | a window to place vehicles on any CARLA map (routes, speeds), set the LiDAR and the traffic, then Start / Pause / Record / Stop a live simulation shown in real time, and every CAV's BEV drawn on the map | [EDITOR.md](docs/EDITOR.md), [OPENSCENARIO.md](docs/OPENSCENARIO.md) |
+| OpenCDA scenarios | the paper's tool: random scenarios on Town03 (4–10 CAVs driven by OpenCDA's behaviour agent, 20–40 vehicles, Table 1 speeds and red lights), saved in the same run format | [OPENCDA.md](docs/OPENCDA.md) |
 | Processing | ego-body mask, OpenDRIVE drivable-road filter, slope-aware ground removal, BEV grids, static sectors, metadata σ / S̃ / A | [GUIDE.md §7](docs/GUIDE.md#7-step-4-from-the-point-cloud-to-the-bev), [PROCESSING.md](docs/PROCESSING.md) |
 | Validation | ground removal and ground-truth boxes scored against CARLA | [PROCESSING.md](docs/PROCESSING.md), [LABEL_ALIGNMENT.md](docs/LABEL_ALIGNMENT.md) |
 | Sensitivity benchmark | 15 scenes, 240 scored runs: noise, mount height, channels, range, drop-off, point rate, CAV count, traffic | [SENSITIVITY.md](docs/SENSITIVITY.md) |
 | Summary | choices, findings and limits of the whole chain | [SUMMARY_BEV.md](docs/SUMMARY_BEV.md), [EXPERIMENT_LOG.md](docs/EXPERIMENT_LOG.md), [PAPER_FIDELITY.md](docs/PAPER_FIDELITY.md) |
+| All experiments and results | every experiment on one page: setup, numbers, figures | [results/README.md](results/README.md) |
 
 ## Main results
+
+**Every experiment and its results on one page: [results/README.md](results/README.md)**. It covers data collection,
+the processing quality, what each CAV sees, the LiDAR sensitivity (channels, range, noise, mount, drop-off,
+points/s), CAV count and traffic, CARLA's reproducibility, the ground-truth boxes, the OpenCDA scenarios and the
+timings.
 
 | Measured | Value |
 |---|---|
@@ -81,10 +90,11 @@ results yet.
 
 ```
 carla-lidar-to-bev/
-├── main.py                      command line: check | drive | record | show | editor | xosc-import | xosc-export
+├── main.py                      command line: check | drive | record [--process] | process | show | editor | xosc-import | xosc-export
 ├── config/
 │   ├── default.yaml             every parameter with its default value
 │   ├── experiments/             ready-made cases: scenario/, lidar/, recording/, custom/ (editor), ablation/ (benchmark)
+│   ├── opencda/                 the paper's setting for OpenCDA (paper_town03.yaml)
 │   └── spawn_plans/             fixed start poses (figure2_town03.json = the paper's Figure 2)
 ├── cavlidar/                    the library
 │   ├── api.py                   simple public functions
@@ -101,11 +111,14 @@ carla-lidar-to-bev/
 │       └── visualization/       BEV plots
 ├── tools/                       validation and benchmark scripts (eval_ground, make_figure2_plan,
 │                                make_sensitivity_scenes, run_ablation, record_moving_sensors, eval_ablation,
-│                                audit_sensitivity, label_alignment, diagnose_label_alignment, make_pipeline_figure)
+│                                audit_sensitivity, label_alignment, diagnose_label_alignment, make_pipeline_figure,
+│                                compare_cavs, opencda_scenario; demo/ = the narrated walkthrough video)
 ├── tests/                       unit tests (no CARLA needed)
-├── results/                     metrics and plots of the sensitivity benchmark and the label-alignment diagnostic
+├── results/                     README = every experiment and its results; metrics and plots of the sensitivity
+│                                benchmark and the label-alignment diagnostic
 └── docs/                        GUIDE (start here), EDITOR, PARAMETERS, EXPERIMENTS, EXPERIMENT_LOG, ARCHITECTURE,
-                                 PROCESSING, SENSITIVITY, LABEL_ALIGNMENT, SUMMARY_BEV, PAPER_FIDELITY, OPENSCENARIO
+                                 PROCESSING, SENSITIVITY, LABEL_ALIGNMENT, SUMMARY_BEV, PAPER_FIDELITY, OPENSCENARIO,
+                                 OPENCDA
 ```
 
 The user only touches **YAML parameters** (or `--set`); `api.py` exposes simple functions; everything that talks to
@@ -139,12 +152,12 @@ data/runs/<date>_<time>_<name>/
 
 Known issues on a 4 GB GPU: `-quality-level=Low` crashes CARLA (*"Shader compilation failures are Fatal"*), and
 changing map with `load_world()` crashed the server: set the start map in `CarlaUE4/Config/DefaultEngine.ini` (the
-editor's CARLA tab does it). More in [GUIDE.md §11](docs/GUIDE.md#11-troubleshooting).
+editor's CARLA menu does it). More in [GUIDE.md §11](docs/GUIDE.md#11-troubleshooting).
 
 ## Tests
 
 ```bash
-python -m unittest discover -s tests -t . -v      # 99 tests, no CARLA needed
+python -m unittest discover -s tests -t . -v      # 115 tests, no CARLA needed
 ```
 
 ## Not in this repository
